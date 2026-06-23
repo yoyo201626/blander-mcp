@@ -730,30 +730,173 @@ def register(app: Server):
 
 ---
 
-## 调试技巧
+## 启动教程
 
-### Addon 日志查看
+> 每次开发前按此顺序操作，确保三个进程都正常运行。
 
-Blender 里 GP handler 出错时，错误会在 Blender System Console 里显示：
-- Windows：Window → Toggle System Console
-- macOS / Linux：从终端启动 Blender，log 打到终端
+### 前置条件
 
-### 快速重载 Addon
+| 依赖 | 最低版本 | 检查命令 |
+|------|----------|----------|
+| Blender | 4.0 | `blender --version` |
+| Python | 3.11 | `python --version` |
+| uv | 任意 | `uv --version` |
 
-在 Blender Scripting 界面的 Text Editor 里运行：
+首次使用时安装依赖：
 
-```python
-import importlib, blender_addon
-importlib.reload(blender_addon)
+```bash
+cd blender-animation-mcp
+uv sync
 ```
 
-或安装 **Addon Reload** 插件（F8 快捷键重载）。
+---
 
-### 手动测试通信
+### 第一步：安装 Blender Addon（首次 / 更新时）
 
-不用 Claude，直接用 Python 脚本测试 Addon TCP：
+1. 打开 Blender
+2. 顶部菜单：**Edit → Preferences → Add-ons → Install…**
+3. 选择项目根目录下的 `blender_addon/` 文件夹（或先打包：`zip -r blender_addon.zip blender_addon/`，再安装 zip）
+4. 在 Add-ons 列表里搜索 **Animation MCP Runtime**，勾选启用
+
+启用后 Blender System Console 应显示：
+
+```
+[MCP Addon] TCP Server started on port 7890
+[MCP Addon] Timer registered
+```
+
+> **Addon 更新后**：重新 Install 覆盖，或在 Scripting 面板执行热重载（见调试教程）。
+
+---
+
+### 第二步：启动 MCP Server
+
+```bash
+# 项目根目录
+uv run python -m mcp_server.main
+```
+
+Server 以 stdio 模式运行，启动后无终端输出属于正常（Claude Desktop 接管 stdin/stdout）。
+
+如需调试输出，用 stderr：
+
+```bash
+uv run python -m mcp_server.main 2>mcp_debug.log
+```
+
+---
+
+### 第三步：配置 Claude Desktop（首次）
+
+编辑 `~/Library/Application Support/Claude/claude_desktop_config.json`（macOS）：
+
+```json
+{
+  "mcpServers": {
+    "blender-animation": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/Users/Admin/projects/blander-mcp",
+        "python",
+        "-m",
+        "mcp_server.main"
+      ]
+    }
+  },
+}
+```
+
+保存后重启 Claude Desktop，工具栏会出现 blender-animation 工具集。
+
+---
+
+### 第四步：验证整条链路
+
+在 Claude Desktop 里说：
+
+```
+ping blender
+```
+
+预期 Claude 调用 `system_ping` 工具，返回：
+
+```json
+{
+  "success": true,
+  "result": {
+    "status": "pong",
+    "blender_version": "4.1.0"
+  }
+}
+```
+
+看到 pong 即代表 Claude → MCP Server → Blender Addon 三段通信全部打通。
+
+---
+
+### 启动顺序总结
+
+```
+① 打开 Blender（确认 Addon 已启用，TCP Server 在 7890 端口监听）
+         ↓
+② 启动 Claude Desktop（自动拉起 MCP Server 子进程）
+         ↓
+③ 在 Claude 里发指令，验证 ping 响应
+```
+
+> **顺序不能反**：MCP Server 启动时会尝试读 stdio，必须由 Claude Desktop 拉起；Blender Addon 要先于 MCP Server 就绪，否则 ping 会返回 BLENDER_NOT_CONNECTED。
+
+---
+
+## 调试教程
+
+### 1. 日志在哪里看
+
+#### Blender System Console（Addon 日志）
+
+- **macOS / Linux**：从终端启动 Blender，所有 `print()` 和异常栈输出到该终端
+
+  ```bash
+  /Applications/Blender.app/Contents/MacOS/Blender
+  ```
+
+- **Windows**：Blender 菜单 → **Window → Toggle System Console**
+
+Addon 正常启动时会打印：
+
+```
+[MCP Addon] TCP Server started on port 7890
+[MCP Addon] Timer registered
+```
+
+Handler 抛出异常时，`server.py` 会捕获并返回 `EXECUTOR_ERROR`，完整堆栈打印到 System Console。
+
+#### MCP Server 日志
+
+MCP Server 的 stdout 被 Claude Desktop 占用（协议传输），调试日志必须写 stderr：
 
 ```python
+import sys
+print("[MCP] 调试信息", file=sys.stderr)
+```
+
+或启动时重定向：
+
+```bash
+uv run python -m mcp_server.main 2>>mcp_debug.log
+tail -f mcp_debug.log
+```
+
+---
+
+### 2. 手动测试 TCP 通信（绕过 Claude）
+
+不启动 Claude，直接用 Python 脚本向 Addon 发命令，快速验证 handler 是否正常：
+
+```python
+# scripts/tcp_test.py
 import socket, json
 
 def send(command):
@@ -764,6 +907,112 @@ def send(command):
     s.close()
     return json.loads(data)
 
+# 测试连通性
 print(send({"tool": "system.ping", "params": {}}))
+
+# 测试场景状态
 print(send({"tool": "scene.get_state", "params": {}}))
+
+# 测试未知工具（验证错误格式）
+print(send({"tool": "not.exist", "params": {}}))
 ```
+
+运行：
+
+```bash
+python scripts/tcp_test.py
+```
+
+---
+
+### 3. 热重载 Addon（不重启 Blender）
+
+修改 Python handler 后，在 Blender **Scripting** 面板的 Text Editor 里执行：
+
+```python
+import importlib
+import blender_addon
+import blender_addon.executor
+import blender_addon.server
+
+# 先停止再重新加载
+blender_addon.server.stop()
+importlib.reload(blender_addon.executor)
+importlib.reload(blender_addon.server)
+importlib.reload(blender_addon)
+blender_addon.server.start()
+print("Addon 重载完成")
+```
+
+或安装 **Addon Reload** 插件后按 **F8** 一键重载。
+
+> 注意：热重载不会影响已在运行的 Timer，`stop()` + `start()` 确保 Timer 和 TCP Server 都重置。
+
+---
+
+### 4. 常见错误及处理
+
+#### `BLENDER_NOT_CONNECTED`
+
+```json
+{"success": false, "error": {"code": "BLENDER_NOT_CONNECTED"}}
+```
+
+**原因**：MCP Server 连不上 7890 端口。  
+**检查**：
+1. Blender 是否已打开？
+2. Addon 是否已启用（System Console 有无 "TCP Server started"）？
+3. 端口是否被占用：`lsof -i :7890`
+
+---
+
+#### `EXECUTOR_ERROR`
+
+```json
+{"success": false, "error": {"code": "EXECUTOR_ERROR", "message": "..."}}
+```
+
+**原因**：handler 内部抛出异常。  
+**处理**：看 Blender System Console 里的完整 Python traceback，定位到具体 handler 文件和行号。
+
+---
+
+#### `UNKNOWN_TOOL`
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNKNOWN_TOOL",
+    "message": "未知工具: vector.draw_stroke",
+    "available_tools": ["system.ping"]
+  }
+}
+```
+
+**原因**：`executor.py` 的 `handlers` 字典里没有注册该工具。  
+**处理**：在 `blender_addon/executor.py` 里添加对应的 handler 映射，并热重载 Addon。
+
+---
+
+#### MCP Server 工具调用超时
+
+Claude Desktop 里工具一直 spinning 无响应。  
+**原因**：`BlenderClient.send()` 等待 readline，但 Blender 没有发回响应。  
+**检查**：
+1. Blender System Console 有无报错？
+2. 用 `tcp_test.py` 手动发同一条命令，看 Blender 是否处理。
+3. 检查 `_process_queue` timer 是否还在运行（Blender 菜单 → Info 区无报错即正常）。
+
+---
+
+### 5. 调试工作流建议
+
+```
+改 handler 代码
+    → Blender 热重载 Addon（F8 或 Scripting 面板脚本）
+    → 用 tcp_test.py 直接发命令验证返回值
+    → 确认无误后再在 Claude 里端到端测试
+```
+
+不要每次都走 Claude → 这会引入 LLM 不确定性，让你不知道是 AI 理解错了还是 handler 有 bug。先用 `tcp_test.py` 把 handler 验证正确，再接入 AI。

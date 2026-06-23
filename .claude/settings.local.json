@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python test_ping.py:*)"
+      "Bash(python test_ping.py:*)",
+      "Bash(uv run *)",
+      "Bash(git rm *)"
     ]
   }
 }
