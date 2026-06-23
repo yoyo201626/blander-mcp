@@ -1,0 +1,13 @@
+[project]
+name = "blander-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fake-bpy-module>=20260501",
+    "fastapi>=0.138.0",
+    "mcp>=1.28.0",
+    "pydantic>=2.13.4",
+    "websocket>=0.2.1",
+]
