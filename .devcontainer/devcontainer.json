@@ -1,6 +1,0 @@
-{
-  "postCreateCommand": "curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:${HOME}/.cargo/bin"
-  }
-}
