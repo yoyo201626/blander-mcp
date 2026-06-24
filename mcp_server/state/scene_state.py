@@ -1,42 +1,35 @@
-from dataclasses import dataclass, field
-from typing import Optional
+from mcp_server.models.scene import SceneObject
 
-@dataclass
-class SceneObject:
-    name: str
-    type: str          # GPENCIL / MESH / CAMERA / LIGHT
-    location: list     # [x, y, z]
 
-@dataclass
 class SceneState:
-    objects: dict[str, SceneObject] = field(default_factory=dict)
-    frame_start: int = 1
-    frame_end: int   = 250
-    frame_current: int = 1
+    def __init__(self) -> None:
+        self.objects: dict[str, SceneObject] = {}
+        self.frame_start: int = 1
+        self.frame_end: int = 250
+        self.frame_current: int = 1
 
-    def add_object(self, obj: SceneObject):
+    def add_object(self, obj: SceneObject) -> None:
         self.objects[obj.name] = obj
 
-    def remove_object(self, name: str):
+    def remove_object(self, name: str) -> None:
         self.objects.pop(name, None)
 
     def to_dict(self) -> dict:
         return {
-            "objects": [
-                {"name": o.name, "type": o.type, "location": o.location}
-                for o in self.objects.values()
-            ],
+            "objects": [o.model_dump() for o in self.objects.values()],
             "frame_start": self.frame_start,
             "frame_end": self.frame_end,
             "frame_current": self.frame_current,
         }
 
-# 全局单例
+
 _state = SceneState()
+
 
 def get_state() -> SceneState:
     return _state
 
-def reset():
+
+def reset() -> None:
     global _state
     _state = SceneState()

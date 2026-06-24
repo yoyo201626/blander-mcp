@@ -3,7 +3,15 @@
     "allow": [
       "Bash(python test_ping.py:*)",
       "Bash(uv run *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "WebFetch(domain:google.github.io)",
+      "WebFetch(domain:docs.pytest.org)",
+      "WebFetch(domain:www.attrs.org)",
+      "WebFetch(domain:www.skills.sh)",
+      "Bash(npx skillsadd *)",
+      "Bash(npx skills *)",
+      "Bash(uv add *)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)"
     ]
   }
 }
