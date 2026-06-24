@@ -11,7 +11,8 @@
       "Bash(npx skillsadd *)",
       "Bash(npx skills *)",
       "Bash(uv add *)",
-      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)"
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)",
+      "Bash(xargs -I{} basename {})"
     ]
   }
 }
