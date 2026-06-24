@@ -12,7 +12,17 @@
       "Bash(npx skills *)",
       "Bash(uv add *)",
       "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)",
-      "Bash(xargs -I{} basename {})"
+      "Bash(xargs -I{} basename {})",
+      "Bash(cp /Users/Admin/projects/blander-mcp/references/blender_mcp/addon/blender_mcp_addon/__init__.py /Users/Admin/projects/blander-mcp/blender_addon/__init__.py)",
+      "Bash(cp /Users/Admin/projects/blander-mcp/references/blender_mcp/addon/blender_mcp_addon/mcp_to_blender_server.py /Users/Admin/projects/blander-mcp/blender_addon/mcp_to_blender_server.py)",
+      "Bash(cp /Users/Admin/projects/blander-mcp/references/blender_mcp/addon/blender_mcp_addon/execute_interactive.py /Users/Admin/projects/blander-mcp/blender_addon/execute_interactive.py)",
+      "Bash(cp /Users/Admin/projects/blander-mcp/references/blender_mcp/addon/blender_mcp_addon/execute_blocking.py /Users/Admin/projects/blander-mcp/blender_addon/execute_blocking.py)",
+      "Bash(cp /Users/Admin/projects/blander-mcp/references/blender_mcp/addon/blender_mcp_addon/deferred_tool.py /Users/Admin/projects/blander-mcp/blender_addon/deferred_tool.py)",
+      "Bash(uv sync *)",
+      "Bash(python *)",
+      "Bash(cp -r /Users/Admin/projects/blander-mcp/references/blender_mcp/mcp/blmcp/data/api /Users/Admin/projects/blander-mcp/mcp_server/data/api)",
+      "Bash(cp -r /Users/Admin/projects/blander-mcp/references/blender_mcp/mcp/blmcp/data/manual /Users/Admin/projects/blander-mcp/mcp_server/data/manual)",
+      "Bash(xargs sed -i '' 's/from blmcp\\\\./from mcp_server./g')"
     ]
   }
 }

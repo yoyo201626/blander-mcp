@@ -1,23 +1,22 @@
 [project]
 name = "blander-mcp"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "AI animation factory MCP server for Blender"
 requires-python = ">=3.13"
 dependencies = [
-    "bpy>=5.1.2",
-    "fastapi>=0.138.0",
+    "docutils>=0.21",
     "mcp>=1.28.0",
     "pydantic>=2.13.4",
-    "websocket>=0.2.1",
+    "pyyaml>=6.0",
 ]
+
+[project.scripts]
+blander-mcp = "mcp_server:main"
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
 ]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 testpaths = ["tests"]
