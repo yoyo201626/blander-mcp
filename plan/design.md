@@ -55,6 +55,14 @@ Blender Engine
 | 执行调度 | `bpy.app.timers` | 保证所有 bpy 调用在 Blender 主线程执行 |
 | Blender 版本 | 4.0+ | Geometry Nodes 和 Grease Pencil 3 趋于稳定 |
 
+#### api
+
+https://docs.blender.org/api/current/index.html
+
+#### 编程风格
+
+https://peps.python.org/pep-0008/
+
 ### 场景状态管理
 
 MCP Server 侧维护一个内存中的 **Scene State**，追踪：
