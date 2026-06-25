@@ -207,14 +207,95 @@ Blender 内部使用线性颜色空间，输入值会被当作 linear 处理。
 
 ---
 
-## 六、版本兼容性
+## 六、上游代码结构与更新方法
+
+`src/mcp/blmcp/` 的内容来自**三个独立来源**，更新时需要分别处理。
+
+### 来源说明
+
+```
+src/mcp/blmcp/
+├── __init__.py        ┐
+├── tools/             ├─ 来源①：blender-mcp 仓库自身代码
+├── tools_helpers/     ┘
+└── data/
+    ├── api/           ── 来源②：Blender Python API 文档构建产物（RST）
+    └── manual/        ── 来源③：Blender 用户手册仓库（RST）
+```
+
+`data/` 下的文件不是 blender-mcp 仓库的代码，是用仓库里的辅助脚本从外部同步进来的。
+
+### 更新来源①：核心代码
+
+```bash
+git clone https://projects.blender.org/blender/blender-mcp.git upstream
+
+# 覆盖核心代码（保留 src/mcp/blmcp/data/ 不动）
+cp -r upstream/mcp/blmcp/__init__.py      src/mcp/blmcp/
+cp -r upstream/mcp/blmcp/tools/           src/mcp/blmcp/
+cp -r upstream/mcp/blmcp/tools_helpers/   src/mcp/blmcp/
+
+# 修复 import 路径（upstream 按自己结构写，迁移后会错位）
+# 将所有 `src.mcp.blmcp` 替换为 `blmcp`
+```
+
+### 更新来源②：API 文档
+
+需要本地 Blender 源码并构建 Python API 文档：
+
+```bash
+# 在 Blender 源码目录构建 API 文档
+make docs_py
+# 构建产物默认在 doc/python_api/
+
+# 用同步脚本复制到项目
+python src/_misc/update_reference_api.py /path/to/blender/doc/python_api/
+```
+
+### 更新来源③：用户手册
+
+```bash
+git clone https://projects.blender.org/blender/blender-manual.git
+
+python src/_misc/update_reference_manual.py /path/to/blender-manual/
+```
+
+### 恢复同步脚本
+
+如果 `src/_misc/` 下的脚本丢失，可从 git 历史找回：
+
+```bash
+git show 6294711:references/blender_mcp/_misc/update_reference_api.py \
+  > src/_misc/update_reference_api.py
+
+git show 6294711:references/blender_mcp/_misc/update_reference_manual.py \
+  > src/_misc/update_reference_manual.py
+```
+
+---
+
+## 七、版本兼容性
 
 | 组件 | 版本 | 备注 |
 |------|------|------|
-| Blender | 4.0+ | Grease Pencil 3 API 在此版本稳定 |
+| Blender | 4.0+ | 当前基准版本 |
 | Python（Blender 内置） | 3.11 | Addon 用此版本，无法更改 |
 | Python（MCP Server） | 3.10+ | blmcp 要求 |
 | blmcp | 1.0.0 | 官方参考实现 |
 | uv | 最新 | 包管理器 |
 
-> ⚠️ Blender 4.2+ 对 Grease Pencil 有较大改动（GPv3），升级前检查所有 GP API 调用。
+> ⚠️ Blender 4.2+ 起 Grease Pencil 升级为 GPv3，API 有较大改动。
+> 升级 Blender 版本时，来源①②③均需同步更新，仅更新核心代码不够。
+
+---
+
+## 八、参考链接
+
+| 资源 | 地址 |
+|------|------|
+| Blender Python API 文档 | https://docs.blender.org/api/current/ |
+| bpy PyPI 包 | https://pypi.org/project/bpy/ |
+| Blender MCP Server 页面 | https://www.blender.org/lab/mcp-server/ |
+| blender-mcp 源码仓库 | https://projects.blender.org/blender/blender-mcp |
+| Blender 用户手册仓库 | https://projects.blender.org/blender/blender-manual |
+| Blender 源码仓库 | https://projects.blender.org/blender/blender |
