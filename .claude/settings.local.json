@@ -24,7 +24,9 @@
       "Bash(cp -r /Users/Admin/projects/blander-mcp/references/blender_mcp/mcp/blmcp/data/manual /Users/Admin/projects/blander-mcp/mcp_server/data/manual)",
       "Bash(xargs sed -i '' 's/from blmcp\\\\./from mcp_server./g')",
       "WebFetch(domain:testing.googleblog.com)",
-      "WebFetch(domain:abseil.io)"
+      "WebFetch(domain:abseil.io)",
+      "Bash(/Applications/Blender.app/Contents/MacOS/Blender --version)",
+      "Bash(python3 *)"
     ]
   }
 }
