@@ -22,7 +22,9 @@
       "Bash(python *)",
       "Bash(cp -r /Users/Admin/projects/blander-mcp/references/blender_mcp/mcp/blmcp/data/api /Users/Admin/projects/blander-mcp/mcp_server/data/api)",
       "Bash(cp -r /Users/Admin/projects/blander-mcp/references/blender_mcp/mcp/blmcp/data/manual /Users/Admin/projects/blander-mcp/mcp_server/data/manual)",
-      "Bash(xargs sed -i '' 's/from blmcp\\\\./from mcp_server./g')"
+      "Bash(xargs sed -i '' 's/from blmcp\\\\./from mcp_server./g')",
+      "WebFetch(domain:testing.googleblog.com)",
+      "WebFetch(domain:abseil.io)"
     ]
   }
 }
