@@ -19,7 +19,7 @@ from bpy.props import (
     StringProperty,
 )  # pylint: disable=import-error
 
-from ....addon.blender_mcp_addon import mcp_to_blender_server
+from . import mcp_to_blender_server
 
 _PORT_MIN = 1024
 _PORT_MAX = 65535
