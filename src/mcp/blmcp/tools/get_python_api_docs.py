@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Blender Authors
+﻿# SPDX-FileCopyrightText: 2026 Blender Authors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -11,7 +11,7 @@ __all__ = (
 import difflib
 import os
 
-from src.mcp.blmcp.tools_helpers.rst_parse_docs import (
+from blmcp.tools_helpers.rst_parse_docs import (
     data_dir,
     doctree_for_path,
     find_definition_in_doctree,

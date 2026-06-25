@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Blender Authors
+﻿# SPDX-FileCopyrightText: 2026 Blender Authors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -8,13 +8,13 @@ __all__ = (
     "register",
 )
 
-from src.mcp.blmcp.tools_helpers import (
+from blmcp.tools_helpers import (
     toolcode_format_call,
     toolcode_load_from_filepath,
     toolcode_wrap_with_calling_convention,
 )
-from src.mcp.blmcp.tools_helpers.connection import send_code
-from src.mcp.blmcp.tools.jump_to_view3d_object_data_by_name_toolcode import Params
+from blmcp.tools_helpers.connection import send_code
+from blmcp.tools.jump_to_view3d_object_data_by_name_toolcode import Params
 from mcp.server.fastmcp import FastMCP  # pylint: disable=import-error,no-name-in-module
 from mcp.types import ToolAnnotations  # pylint: disable=import-error,no-name-in-module
 

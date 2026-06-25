@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Blender Authors
+﻿# SPDX-FileCopyrightText: 2026 Blender Authors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -60,7 +60,7 @@ def main() -> int:
     mcp = FastMCP("blender-mcp", instructions=str(prompts["initial_instructions"]))
 
     # Auto-discover and register all tools (they are never un-registered).
-    import src.mcp.blmcp.tools as tools_pkg
+    import blmcp.tools as tools_pkg
 
     for _importer, modname, _ispkg in pkgutil.iter_modules(tools_pkg.__path__):
         if modname.endswith("_toolcode") or modname.startswith("_template_"):

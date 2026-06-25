@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Blender Authors
+﻿# SPDX-FileCopyrightText: 2026 Blender Authors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -8,8 +8,8 @@ __all__ = (
     "register",
 )
 
-from src.mcp.blmcp.tools_helpers.blender_cli import run_blender_cli, synced_blend_for_cli
-from src.mcp.blmcp.tools_helpers.connection import send_code
+from blmcp.tools_helpers.blender_cli import run_blender_cli, synced_blend_for_cli
+from blmcp.tools_helpers.connection import send_code
 from mcp.server.fastmcp import FastMCP  # pylint: disable=import-error,no-name-in-module
 from mcp.types import ToolAnnotations  # pylint: disable=import-error,no-name-in-module
 

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Blender Authors
+﻿# SPDX-FileCopyrightText: 2026 Blender Authors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -8,7 +8,7 @@ __all__ = (
     "register",
 )
 
-from src.mcp.blmcp.tools_helpers.rst_doc_search import (
+from blmcp.tools_helpers.rst_doc_search import (
     SEARCH_TOOL_DESCRIPTION,
     search,
     with_doc,

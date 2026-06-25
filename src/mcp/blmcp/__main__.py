@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Blender Authors
+﻿# SPDX-FileCopyrightText: 2026 Blender Authors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -10,6 +10,6 @@ __all__ = ()
 
 import sys
 
-from src.mcp.blmcp import main
+from blmcp import main
 
 sys.exit(main())

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Blender Authors
+﻿# SPDX-FileCopyrightText: 2026 Blender Authors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -75,7 +75,7 @@ def with_doc(doc: str) -> Callable[[Callable[..., object]], Callable[..., object
     return decorate
 
 
-from src.mcp.blmcp.tools_helpers.rst_parse_docs import (
+from blmcp.tools_helpers.rst_parse_docs import (
     data_dir,
     split_paragraphs_with_sections_for_path,
     split_paragraphs_with_sections_from_text,

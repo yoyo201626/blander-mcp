@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Blender Authors
+﻿# SPDX-FileCopyrightText: 2026 Blender Authors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -18,7 +18,7 @@ import os
 import subprocess
 from collections.abc import Generator
 
-from src.mcp.blmcp.tools_helpers.connection import send_code
+from blmcp.tools_helpers.connection import send_code
 
 _log = logging.getLogger(__name__)
 
