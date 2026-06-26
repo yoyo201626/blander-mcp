@@ -493,6 +493,19 @@ EXPECTED_TOOLS = [
         }
     },
     {
+        "name": "ping",
+        "description": "\n"
+        "Verify that Blender is online and return its version string.\n"
+        "\n"
+        "Call this before other tools to confirm the Blender addon is running.\n"
+        "Returns an error if the connection to Blender cannot be established.\n",
+        "inputSchema": {
+            "properties": {},
+            "title": "pingArguments",
+            "type": "object"
+        }
+    },
+    {
         "name": "render_thumbnail_to_path",
         "description": "\n"
         "Render a small, low-quality thumbnail to *output_path* (temporarily overrides settings).\n",
