@@ -8,14 +8,24 @@
 
 ### 开发阶段用 symlink，不要每次打 zip
 
-```powershell
-# Windows（管理员 PowerShell）
-New-Item -ItemType SymbolicLink `
-  -Path "$env:APPDATA\Blender Foundation\Blender\4.x\scripts\addons\blender_mcp_addon" `
-  -Target "D:\data\projects\blander-mcp\src\addon\blender_mcp_addon"
+Blender 5.1+ 使用 Extensions 系统，extension id 为 `mcp`，链接名必须与之一致。
+
+**macOS**
+
+```bash
+ln -s /path/to/blander-mcp/src/addon/blender_mcp_addon \
+  ~/Library/Application\ Support/Blender/5.1/extensions/user_default/mcp
 ```
 
-修改代码后在 Blender 中重新启用 Addon 即可生效，无需重装。
+**Windows**（管理员 PowerShell）
+
+```powershell
+New-Item -ItemType SymbolicLink `
+  -Path "$env:APPDATA\Blender Foundation\Blender\5.1\extensions\user_default\mcp" `
+  -Target "C:\path\to\blander-mcp\src\addon\blender_mcp_addon"
+```
+
+创建链接后重启 Blender，在 **Edit > Preferences > Add-ons** 中搜索并启用 **MCP**。
 
 ### Blender Python Console 快速测试
 
@@ -31,8 +41,11 @@ New-Item -ItemType SymbolicLink `
 从命令行启动 Blender，`print()` 输出到该终端：
 
 ```bash
+# macOS
+/Applications/Blender.app/Contents/MacOS/Blender
+
 # Windows
-"C:\Program Files\Blender Foundation\Blender 4.x\blender.exe"
+"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe"
 ```
 
 ---
