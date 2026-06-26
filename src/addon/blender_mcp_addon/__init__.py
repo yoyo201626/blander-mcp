@@ -212,7 +212,7 @@ class _BLMCP_OT_server_start(bpy.types.Operator):  # type: ignore[misc]
     bl_description = "Start the MCP socket bridge server that the MCP server can connect to"
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        from ....addon.blender_mcp_addon import execute_interactive
+        from . import execute_interactive
 
         # Timers do not fire in background mode. Use the CLI command instead:
         # `blender --background file.blend --command blender_mcp`.
@@ -252,7 +252,7 @@ class _BLMCP_OT_server_stop(bpy.types.Operator):  # type: ignore[misc]
 
     def execute(self, context: bpy.types.Context) -> set[str]:
         del context
-        from ....addon.blender_mcp_addon import execute_interactive
+        from . import execute_interactive
 
         # Clear any stale auto-start error so it does not persist in the UI.
         _State.startup_info_clear()
@@ -268,7 +268,7 @@ def _autostart_timer() -> None:
     Deferred timer callback that starts the server when ``use_autostart``
     is enabled. Runs after a delay to avoid slowing down Blender's startup.
     """
-    from ....addon.blender_mcp_addon import execute_interactive
+    from . import execute_interactive
 
     if not _State.startup_online_ok_or_error():
         return
@@ -337,7 +337,7 @@ def register() -> None:
 
 
 def unregister() -> None:
-    from ....addon.blender_mcp_addon import execute_interactive
+    from . import execute_interactive
 
     for cmd in _cli_commands:
         bpy.utils.unregister_cli_command(cmd)
