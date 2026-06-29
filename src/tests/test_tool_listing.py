@@ -499,6 +499,94 @@ EXPECTED_TOOLS = [
         }
     },
     {
+        "name": "gp_material_assign",
+        "description": "\n"
+        "Assign a Grease Pencil material to a GP object's material slots.\n"
+        "\n"
+        "If the material is already in a slot on ``object_name``, the\n"
+        "existing ``slot_index`` is returned without creating a duplicate.\n"
+        "Otherwise the material is appended to the end of the slot list.\n"
+        "\n"
+        "The returned ``slot_index`` (0-based) is the value to pass as\n"
+        "``material_index`` when calling ``gp_stroke_draw`` or\n"
+        "``gp_shape_draw``.\n"
+        "\n"
+        "Returns an error if the object is not found, is not a Grease\n"
+        "Pencil object, or the material does not exist or is not a GP\n"
+        "material (use ``gp_material_create`` to make one).\n",
+        "inputSchema": {
+            "properties": {
+                "object_name": {
+                    "title": "Object Name",
+                    "type": "string"
+                },
+                "material_name": {
+                    "title": "Material Name",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "object_name",
+                "material_name"
+            ],
+            "title": "gp_material_assignArguments",
+            "type": "object"
+        }
+    },
+    {
+        "name": "gp_material_create",
+        "description": "\n"
+        "Create a Grease Pencil material with stroke and fill colors (GPv3).\n"
+        "\n"
+        "Colors are RGBA lists with values in ``[0.0, 1.0]``:\n"
+        "\n"
+        "- ``stroke_color``: outline color, default opaque black\n"
+        "  ``[0.0, 0.0, 0.0, 1.0]``.\n"
+        "- ``fill_color``: interior fill color, default fully transparent\n"
+        "  ``[1.0, 1.0, 1.0, 0.0]``.  Set alpha ``> 0`` to make fill\n"
+        "  visible.\n"
+        "\n"
+        "Blender uses **linear** color space internally; the values you\n"
+        "provide are treated as linear, not sRGB.  Pure black\n"
+        "``[0, 0, 0, 1]`` and pure white ``[1, 1, 1, 1]`` are\n"
+        "unaffected; intermediate colors will appear slightly different\n"
+        "from sRGB equivalents.\n"
+        "\n"
+        "After creation, assign the material to a GP object with\n"
+        "``gp_material_assign``, then reference it by slot index when\n"
+        "drawing strokes via ``gp_stroke_draw`` or ``gp_shape_draw``.\n"
+        "\n"
+        "The returned ``name`` is the actual name Blender assigned\n"
+        "(may differ if a material with that name already exists).\n",
+        "inputSchema": {
+            "properties": {
+                "name": {
+                    "default": "GPMaterial",
+                    "title": "Name",
+                    "type": "string"
+                },
+                "stroke_color": {
+                    "default": [0.0, 0.0, 0.0, 1.0],
+                    "items": {
+                        "type": "number"
+                    },
+                    "title": "Stroke Color",
+                    "type": "array"
+                },
+                "fill_color": {
+                    "default": [1.0, 1.0, 1.0, 0.0],
+                    "items": {
+                        "type": "number"
+                    },
+                    "title": "Fill Color",
+                    "type": "array"
+                }
+            },
+            "title": "gp_material_createArguments",
+            "type": "object"
+        }
+    },
+    {
         "name": "gp_object_create",
         "description": "\n"
         "Create a new Grease Pencil object in the active scene.\n"

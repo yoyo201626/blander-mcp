@@ -964,6 +964,84 @@ class _TestServerMixin:
         self.assertEqual(data["error_code"], "INVALID_SHAPE")
 
     # -----------------------------------------------------------------
+    # Material tools (REQ-05).
+
+    def test_gp_material_create_basic(self) -> None:
+        data = self._test_tool("gp_material_create", {
+            "name": "TestMat",
+            "stroke_color": [1.0, 0.0, 0.0, 1.0],
+            "fill_color": [0.0, 1.0, 0.0, 0.5],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["name"], "TestMat")
+        self.assertIsInstance(data["stroke_color"], list)
+        self.assertEqual(len(data["stroke_color"]), 4)
+        self.assertIsInstance(data["fill_color"], list)
+
+    def test_gp_material_create_deduplication(self) -> None:
+        self._test_tool("gp_material_create", {"name": "MatA"})
+        data = self._test_tool("gp_material_create", {"name": "MatA"})
+        self.assertEqual(data["status"], "ok")
+        self.assertNotEqual(data["name"], "MatA")
+
+    def test_gp_material_create_error_invalid_color(self) -> None:
+        data = self._test_tool("gp_material_create", {
+            "name": "Bad",
+            "stroke_color": [1.0, 0.0],
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_COLOR")
+
+    def test_gp_material_assign_basic(self) -> None:
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        self._test_tool("gp_material_create", {"name": "Ink"})
+        data = self._test_tool("gp_material_assign", {
+            "object_name": "Canvas",
+            "material_name": "Ink",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "Canvas")
+        self.assertEqual(data["material_name"], "Ink")
+        self.assertIsInstance(data["slot_index"], int)
+        self.assertGreaterEqual(data["slot_index"], 0)
+
+    def test_gp_material_assign_idempotent(self) -> None:
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        self._test_tool("gp_material_create", {"name": "Ink"})
+        d1 = self._test_tool("gp_material_assign", {
+            "object_name": "Canvas",
+            "material_name": "Ink",
+        })
+        d2 = self._test_tool("gp_material_assign", {
+            "object_name": "Canvas",
+            "material_name": "Ink",
+        })
+        self.assertEqual(d1["slot_index"], d2["slot_index"])
+
+    def test_gp_material_assign_error_material_not_found(self) -> None:
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        data = self._test_tool("gp_material_assign", {
+            "object_name": "Canvas",
+            "material_name": "NoSuchMaterial",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "MATERIAL_NOT_FOUND")
+        self.assertIsInstance(data["current_state"]["available_gp_materials"], list)
+
+    def test_gp_material_assign_error_not_gp_material(self) -> None:
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        # Create a plain (non-GP) material via execute_blender_code
+        self._test_tool("execute_blender_code", {
+            "code": "import bpy\nbpy.data.materials.new('PlainMat')\n",
+        })
+        data = self._test_tool("gp_material_assign", {
+            "object_name": "Canvas",
+            "material_name": "PlainMat",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "NOT_GP_MATERIAL")
+
+    # -----------------------------------------------------------------
     # Navigation tools.
 
     def test_jump_to_tab_by_name(self) -> None:
