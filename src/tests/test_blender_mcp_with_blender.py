@@ -705,6 +705,47 @@ class _TestServerMixin:
             ],
         })
 
+    def test_get_scene_state(self) -> None:
+        data = self._test_tool("get_scene_state")
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["scene_name"], "Scene")
+        # Frame info.
+        self.assertIsInstance(data["frame_start"], int)
+        self.assertIsInstance(data["frame_end"], int)
+        self.assertIsInstance(data["frame_current"], int)
+        self.assertGreaterEqual(data["frame_end"], data["frame_start"])
+        self.assertIsInstance(data["fps"], (int, float))
+        self.assertGreater(data["fps"], 0)
+        # Objects.
+        objects = data["objects"]
+        self.assertIsInstance(objects, list)
+        names = [o["name"] for o in objects]
+        self.assertIn("Camera", names)
+        self.assertIn("Cube", names)
+        self.assertIn("Light", names)
+        for obj in objects:
+            self.assertIn("name", obj)
+            self.assertIn("type", obj)
+            location = obj["location"]
+            self.assertIsInstance(location, list)
+            self.assertEqual(len(location), 3)
+            for coord in location:
+                self.assertIsInstance(coord, float)
+
+    def test_get_scene_state_frame_info(self) -> None:
+        """Verify that frame_current and frame_end reflect live Blender state."""
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "bpy.context.scene.frame_current = 42\n"
+                "bpy.context.scene.frame_end = 120\n"
+                "result = {'done': True}\n"
+            ),
+        })
+        data = self._test_tool("get_scene_state")
+        self.assertEqual(data["frame_current"], 42)
+        self.assertEqual(data["frame_end"], 120)
+
     # -----------------------------------------------------------------
     # Navigation tools.
 
