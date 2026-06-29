@@ -33,6 +33,13 @@ class Params(NamedTuple):
     mode: str
     stroke_radius: float
     material_index: int
+    x1: float
+    y1: float
+    z1: float
+    x2: float
+    y2: float
+    z2: float
+    points_count: int
 
 
 class Result(NamedTuple):
@@ -44,7 +51,7 @@ class Result(NamedTuple):
     point_count: int
 
 
-_VALID_SHAPES = ("rect", "circle")
+_VALID_SHAPES = ("line", "rect", "circle")
 
 
 def _get_gp_object_names() -> list[str]:
@@ -52,6 +59,29 @@ def _get_gp_object_names() -> list[str]:
     return sorted(
         obj.name for obj in bpy.data.objects if obj.type == "GREASEPENCIL"
     )
+
+
+def _line_points(
+    x1: float,
+    y1: float,
+    z1: float,
+    x2: float,
+    y2: float,
+    z2: float,
+    points_count: int,
+) -> list[list[float]]:
+    n = max(points_count, 2)
+    if n == 2:
+        return [[x1, y1, z1], [x2, y2, z2]]
+    pts = []
+    for i in range(n):
+        t = i / (n - 1)
+        pts.append([
+            x1 + t * (x2 - x1),
+            y1 + t * (y2 - y1),
+            z1 + t * (z2 - z1),
+        ])
+    return pts
 
 
 def _rect_points(
@@ -185,7 +215,8 @@ def main(params: Params) -> "Result | ErrorResult":
             ),
             current_state={},
             hint=(
-                "Use 'rect' for a rectangle or 'circle' for a circle. "
+                "Use 'line' for a straight line, 'rect' for a rectangle, "
+                "or 'circle' for a circle. "
                 "For freeform strokes use `gp_stroke_draw` instead."
             ),
         )
@@ -204,7 +235,13 @@ def main(params: Params) -> "Result | ErrorResult":
             ),
         )
 
-    if params.shape == "rect":
+    if params.shape == "line":
+        points = _line_points(
+            params.x1, params.y1, params.z1,
+            params.x2, params.y2, params.z2,
+            params.points_count,
+        )
+    elif params.shape == "rect":
         points = _rect_points(
             params.cx, params.cy, params.cz, params.width, params.height
         )

@@ -42,18 +42,29 @@ def register(mcp: FastMCP) -> None:
         mode: str = "replace",
         stroke_radius: float = 0.01,
         material_index: int = 0,
+        x1: float = 0.0,
+        y1: float = 0.0,
+        z1: float = 0.0,
+        x2: float = 1.0,
+        y2: float = 0.0,
+        z2: float = 0.0,
+        points_count: int = 2,
     ) -> dict[str, object]:
         """
         Draw a predefined geometric shape on a Grease Pencil layer (GPv3).
 
-        ``shape`` must be one of ``"rect"`` or ``"circle"``.
+        ``shape`` must be one of ``"line"``, ``"rect"``, or ``"circle"``.
 
-        For ``"rect"``: a closed rectangle centred at (cx, cy, cz) in
-        the XZ plane. ``width`` is the total X-extent; ``height`` is
+        For ``"line"``: a straight stroke from ``(x1, y1, z1)`` to
+        ``(x2, y2, z2)``.  ``points_count`` sets the number of evenly
+        spaced points along the line (minimum 2, default 2).
+
+        For ``"rect"``: a closed rectangle centred at ``(cx, cy, cz)``
+        in the XZ plane. ``width`` is the total X-extent; ``height`` is
         the total Z-extent. Both default to ``2.0``.
 
         For ``"circle"``: a polygon approximation of a circle centred
-        at (cx, cy, cz) in the XZ plane. ``radius`` controls size
+        at ``(cx, cy, cz)`` in the XZ plane. ``radius`` controls size
         (default ``1.0``); ``segments`` controls smoothness (default
         ``32``).
 
@@ -85,5 +96,12 @@ def register(mcp: FastMCP) -> None:
             "mode": mode,
             "stroke_radius": stroke_radius,
             "material_index": material_index,
+            "x1": x1,
+            "y1": y1,
+            "z1": z1,
+            "x2": x2,
+            "y2": y2,
+            "z2": z2,
+            "points_count": points_count,
         }
         return send_code(toolcode_format_call(_TOOL_CALL, params), strict_json=True)

@@ -697,14 +697,18 @@ EXPECTED_TOOLS = [
         "description": "\n"
         "Draw a predefined geometric shape on a Grease Pencil layer (GPv3).\n"
         "\n"
-        "``shape`` must be one of ``\"rect\"`` or ``\"circle\"``.\n"
+        "``shape`` must be one of ``\"line\"``, ``\"rect\"``, or ``\"circle\"``.\n"
         "\n"
-        "For ``\"rect\"``: a closed rectangle centred at (cx, cy, cz) in\n"
-        "the XZ plane. ``width`` is the total X-extent; ``height`` is\n"
+        "For ``\"line\"``: a straight stroke from ``(x1, y1, z1)`` to\n"
+        "``(x2, y2, z2)``.  ``points_count`` sets the number of evenly\n"
+        "spaced points along the line (minimum 2, default 2).\n"
+        "\n"
+        "For ``\"rect\"``: a closed rectangle centred at ``(cx, cy, cz)``\n"
+        "in the XZ plane. ``width`` is the total X-extent; ``height`` is\n"
         "the total Z-extent. Both default to ``2.0``.\n"
         "\n"
         "For ``\"circle\"``: a polygon approximation of a circle centred\n"
-        "at (cx, cy, cz) in the XZ plane. ``radius`` controls size\n"
+        "at ``(cx, cy, cz)`` in the XZ plane. ``radius`` controls size\n"
         "(default ``1.0``); ``segments`` controls smoothness (default\n"
         "``32``).\n"
         "\n"
@@ -786,6 +790,41 @@ EXPECTED_TOOLS = [
                 "material_index": {
                     "default": 0,
                     "title": "Material Index",
+                    "type": "integer"
+                },
+                "x1": {
+                    "default": 0.0,
+                    "title": "X1",
+                    "type": "number"
+                },
+                "y1": {
+                    "default": 0.0,
+                    "title": "Y1",
+                    "type": "number"
+                },
+                "z1": {
+                    "default": 0.0,
+                    "title": "Z1",
+                    "type": "number"
+                },
+                "x2": {
+                    "default": 1.0,
+                    "title": "X2",
+                    "type": "number"
+                },
+                "y2": {
+                    "default": 0.0,
+                    "title": "Y2",
+                    "type": "number"
+                },
+                "z2": {
+                    "default": 0.0,
+                    "title": "Z2",
+                    "type": "number"
+                },
+                "points_count": {
+                    "default": 2,
+                    "title": "Points Count",
                     "type": "integer"
                 }
             },

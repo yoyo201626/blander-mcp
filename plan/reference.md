@@ -153,11 +153,17 @@ drawing = frame.drawing
 ```python
 mat = bpy.data.materials.new("my_mat")
 bpy.data.materials.create_gpencil_data(mat)
-mat.grease_pencil.color      = (0.0, 0.0, 0.0, 1.0)   # 描边色
-mat.grease_pencil.fill_color = (1.0, 0.0, 0.0, 1.0)   # 填充色
-mat.grease_pencil.show_fill  = True
+mat.grease_pencil.color      = (0.0, 0.0, 0.0, 1.0)   # 描边色（RGBA，线性）
+mat.grease_pencil.fill_color = (1.0, 0.0, 0.0, 1.0)   # 填充色（RGBA，线性）
+# 注意：show_fill / show_stroke 在 Blender 5.1 中已废弃（将在 6.0 移除）
+# 填充可见性改由 fill_color[3]（alpha）控制，alpha=0 即隐藏填充
 
 gp_obj.data.materials.append(mat)
+
+# 检查对象槽中是否已有该材质（幂等分配）
+existing = [s.material for s in gp_obj.material_slots if s.material]
+if mat not in existing:
+    gp_obj.data.materials.append(mat)
 ```
 
 ### 坐标系
@@ -236,7 +242,71 @@ Blender 内部使用线性颜色空间，输入值会被当作 linear 处理。
 
 ---
 
-## 六、上游代码结构与更新方法
+## 六、渲染 API 速查（Blender 5.1）
+
+### 单帧渲染
+
+```python
+scene = bpy.context.scene
+rd = scene.render
+
+# 临时覆盖分辨率
+orig_x, orig_y = rd.resolution_x, rd.resolution_y
+rd.resolution_x, rd.resolution_y = 1920, 1080
+rd.resolution_percentage = 100   # 确保实际等于指定值
+
+# 设置输出路径（write_still 会在渲染完成后写文件）
+orig_filepath = rd.filepath
+rd.filepath = "/tmp/frame.png"
+
+# 非交互（后台）模式
+bpy.ops.render.render(write_still=True)
+
+# 交互模式（异步，需用 bpy.app.timers 轮询）
+bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
+
+# 恢复
+rd.filepath = orig_filepath
+rd.resolution_x, rd.resolution_y = orig_x, orig_y
+```
+
+### 动画序列 → 视频（Blender 5.1 新 API）
+
+```python
+rd = scene.render
+image_settings = rd.image_settings
+
+# Blender 5.1+：media_type 属性
+image_settings.media_type = 'VIDEO'   # 'IMAGE' / 'MULTI_LAYER_IMAGE' / 'VIDEO'
+
+# ffmpeg 编解码（无论新旧 API 均有效）
+rd.ffmpeg.format      = 'MPEG4'
+rd.ffmpeg.codec       = 'H264'
+rd.ffmpeg.audio_codec = 'NONE'
+
+rd.filepath = "/tmp/output.mp4"
+scene.frame_start = 1
+scene.frame_end   = 60
+
+bpy.ops.render.render(animation=True)          # 后台模式
+# bpy.ops.render.render('INVOKE_DEFAULT', animation=True)  # 交互模式
+
+# 检查渲染是否完成（交互模式轮询）
+bpy.app.is_job_running('RENDER')   # True = 仍在渲染
+```
+
+### 兼容性写法（同时支持旧版与 5.1）
+
+```python
+if hasattr(image_settings, "media_type"):
+    image_settings.media_type = 'VIDEO'
+else:
+    image_settings.file_format = 'FFMPEG'
+```
+
+---
+
+## 八、上游代码结构与更新方法
 
 `src/mcp/blmcp/` 的内容来自**三个独立来源**，更新时需要分别处理。
 
@@ -368,22 +438,31 @@ git show 6294711:references/blender_mcp/_misc/update_reference_manual.py \
 
 ---
 
-## 七、版本兼容性
+## 七、版本兼容性（Blender 5.1 基准）
 
 | 组件 | 版本 | 备注 |
 |------|------|------|
-| Blender | 4.0+ | 当前基准版本 |
+| Blender | **5.1**（基准） | GPv3 API，Extensions 系统 |
 | Python（Blender 内置） | 3.11 | Addon 用此版本，无法更改 |
 | Python（MCP Server） | 3.10+ | blmcp 要求 |
 | blmcp | 1.0.0 | 官方参考实现 |
 | uv | 最新 | 包管理器 |
 
-> ⚠️ Blender 4.2+ 起 Grease Pencil 升级为 GPv3，API 有较大改动。
+**已知 Blender 5.1 API 变更：**
+
+| 变更项 | 旧 API（4.x） | 新 API（5.1） |
+|--------|--------------|--------------|
+| GP 对象类型 | `'GPENCIL'` | `'GREASEPENCIL'` |
+| GP 数据创建 | `bpy.data.grease_pencils.new()` | 同上（未变） |
+| GP 笔触创建 | `frame.strokes.new()` | `drawing.add_strokes([n])` |
+| GP 填充可见 | `mat.grease_pencil.show_fill = True` | alpha > 0（`show_fill` 废弃） |
+| 视频渲染格式 | `image_settings.file_format = 'FFMPEG'` | `image_settings.media_type = 'VIDEO'` |
+
 > 升级 Blender 版本时，来源①②③均需同步更新，仅更新核心代码不够。
 
 ---
 
-## 八、参考链接
+## 九、参考链接
 
 | 资源 | 地址 |
 |------|------|

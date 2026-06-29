@@ -952,6 +952,34 @@ class _TestServerMixin:
         self.assertEqual(data["shape"], "circle")
         self.assertEqual(data["point_count"], 17)
 
+    def test_gp_shape_draw_line(self) -> None:
+        self._setup_gp_canvas()
+        data = self._test_tool("gp_shape_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "shape": "line",
+            "x1": 0.0, "y1": 0.0, "z1": 0.0,
+            "x2": 2.0, "y2": 0.0, "z2": 1.0,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["shape"], "line")
+        self.assertEqual(data["point_count"], 2)
+
+    def test_gp_shape_draw_line_with_points_count(self) -> None:
+        self._setup_gp_canvas()
+        data = self._test_tool("gp_shape_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "shape": "line",
+            "x1": -1.0, "y1": 0.0, "z1": 0.0,
+            "x2": 1.0, "y2": 0.0, "z2": 0.0,
+            "points_count": 5,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["point_count"], 5)
+
     def test_gp_shape_draw_error_invalid_shape(self) -> None:
         self._setup_gp_canvas()
         data = self._test_tool("gp_shape_draw", {
