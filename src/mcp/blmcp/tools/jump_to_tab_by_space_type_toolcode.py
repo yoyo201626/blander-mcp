@@ -14,6 +14,9 @@ __all__ = (
 
 from typing import NamedTuple
 
+# @include_begin: _template_tool_error.py
+# @include_end
+
 
 class Params(NamedTuple):
     space_type: str
@@ -22,25 +25,34 @@ class Params(NamedTuple):
 
 class Result(NamedTuple):
     status: str
-    workspace: str | None = None
-    space_type: str | None = None
+    workspace: str
+    space_type: str
     created: bool | None = None
-    message: str | None = None
-    available_space_types: list[str] | None = None
 
 
-def main(params: Params) -> Result:
+def main(params: Params) -> "Result | ErrorResult":
     import bpy  # pylint: disable=import-error,no-name-in-module
 
     if bpy.app.background:
-        return Result(status="error", message="Not available in background mode")
+        return ErrorResult(
+            status="error",
+            error_code="BACKGROUND_MODE",
+            message="Not available in background mode.",
+            current_state={},
+            hint="Rerun with an interactive Blender session.",
+        )
     if bpy.context.window is None:
-        return Result(status="error", message="No active window")
+        return ErrorResult(
+            status="error",
+            error_code="NO_ACTIVE_WINDOW",
+            message="No active window.",
+            current_state={},
+            hint="Ensure Blender has a visible window.",
+        )
 
     def _largest_area(screen: "bpy.types.Screen") -> "bpy.types.Area | None":
         return max(screen.areas, key=lambda a: a.width * a.height, default=None)
 
-    # Find an existing workspace whose largest area matches the desired space type.
     found = None
     for ws in bpy.data.workspaces:
         for screen in ws.screens:
@@ -53,14 +65,23 @@ def main(params: Params) -> Result:
 
     if found:
         bpy.context.window.workspace = found
-        return Result(status="ok", workspace=found.name, space_type=params.space_type)
+        return Result(
+            status="ok",
+            workspace=found.name,
+            space_type=params.space_type,
+        )
 
     if params.allow_edits:
-        # Duplicate the current workspace and change its main area type.
         try:
             bpy.ops.workspace.duplicate()
         except RuntimeError as ex:
-            return Result(status="error", message=str(ex))
+            return ErrorResult(
+                status="error",
+                error_code="OPERATION_FAILED",
+                message=str(ex),
+                current_state={},
+                hint="Try switching to a different workspace first.",
+            )
         new_ws = bpy.context.window.workspace
         new_ws.name = params.space_type.replace("_", " ").title()
         area = _largest_area(bpy.context.screen)
@@ -80,8 +101,15 @@ def main(params: Params) -> Result:
         for area in ((_largest_area(screen),) if _largest_area(screen) else ())
         if area is not None
     })
-    return Result(
+    return ErrorResult(
         status="error",
-        message="No workspace with space type {!r} found".format(params.space_type),
-        available_space_types=available,
+        error_code="SPACE_TYPE_NOT_FOUND",
+        message="No workspace with space type {!r} found.".format(
+            params.space_type
+        ),
+        current_state={"available_space_types": available},
+        hint=(
+            "Set `allow_edits=True` to create a new workspace, "
+            "or use a type from `current_state.available_space_types`."
+        ),
     )

@@ -14,6 +14,9 @@ __all__ = (
 
 from typing import NamedTuple
 
+# @include_begin: _template_tool_error.py
+# @include_end
+
 
 class Params(NamedTuple):
     name: str
@@ -21,25 +24,40 @@ class Params(NamedTuple):
 
 class Result(NamedTuple):
     status: str
-    workspace: str | None = None
-    message: str | None = None
-    available_workspaces: list[str] | None = None
+    workspace: str
 
 
-def main(params: Params) -> Result:
+def main(params: Params) -> "Result | ErrorResult":
     import bpy  # pylint: disable=import-error,no-name-in-module
 
     if bpy.app.background:
-        return Result(status="error", message="Not available in background mode")
+        return ErrorResult(
+            status="error",
+            error_code="BACKGROUND_MODE",
+            message="Not available in background mode.",
+            current_state={},
+            hint="Rerun with an interactive Blender session.",
+        )
     if bpy.context.window is None:
-        return Result(status="error", message="No active window")
+        return ErrorResult(
+            status="error",
+            error_code="NO_ACTIVE_WINDOW",
+            message="No active window.",
+            current_state={},
+            hint="Ensure Blender has a visible window.",
+        )
 
     ws = bpy.data.workspaces.get(params.name)
     if ws is None:
-        return Result(
+        available = [w.name for w in bpy.data.workspaces]
+        return ErrorResult(
             status="error",
-            message="Workspace {!r} not found".format(params.name),
-            available_workspaces=[w.name for w in bpy.data.workspaces],
+            error_code="WORKSPACE_NOT_FOUND",
+            message="Workspace {!r} not found.".format(params.name),
+            current_state={"available_workspaces": available},
+            hint=(
+                "Use a name from `current_state.available_workspaces`."
+            ),
         )
 
     bpy.context.window.workspace = ws

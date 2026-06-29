@@ -14,6 +14,9 @@ __all__ = (
 
 from typing import NamedTuple
 
+# @include_begin: _template_tool_error.py
+# @include_end
+
 
 class Params(NamedTuple):
     name: str
@@ -21,33 +24,36 @@ class Params(NamedTuple):
 
 class Result(NamedTuple):
     status: str
-    name: str | None = None
-    type: str | None = None
-    location: list[float] | None = None
-    rotation: list[float] | None = None
-    scale: list[float] | None = None
-    dimensions: list[float] | None = None
-    parent: str | None = None
-    children: list[str] | None = None
-    modifiers: list[dict[str, object]] | None = None
-    constraints: list[dict[str, object]] | None = None
-    materials: list[str | None] | None = None
-    visibility: dict[str, bool] | None = None
-    data_name: str | None = None
-    collections: list[str] | None = None
-    message: str | None = None
+    name: str
+    type: str
+    location: list[float]
+    rotation: list[float]
+    scale: list[float]
+    dimensions: list[float]
+    parent: str | None
+    children: list[str]
+    modifiers: list[dict[str, object]]
+    constraints: list[dict[str, object]]
+    materials: list[str | None]
+    visibility: dict[str, bool]
+    data_name: str | None
+    collections: list[str]
 
 
-def main(params: Params) -> Result:
+def main(params: Params) -> "Result | ErrorResult":
     import bpy  # pylint: disable=import-error,no-name-in-module
 
     obj = bpy.data.objects.get(params.name)
     if obj is None:
         available = sorted(bpy.data.objects.keys())
-        return Result(
+        return ErrorResult(
             status="error",
-            message="Object {!r} not found. Available objects: {:s}".format(
-                params.name, ", ".join(available) if available else "(none)",
+            error_code="OBJECT_NOT_FOUND",
+            message="Object {!r} not found.".format(params.name),
+            current_state={"available_objects": available},
+            hint=(
+                "Call `get_objects_summary` to see all objects, "
+                "then retry with a name from `current_state.available_objects`."
             ),
         )
 

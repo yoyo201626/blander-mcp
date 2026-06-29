@@ -643,8 +643,11 @@ class _TestServerMixin:
     def test_get_object_detail_summary_error(self) -> None:
         data = self._test_tool("get_object_detail_summary", {"name": "NonExistent"})
         self.assertEqual(data["status"], "error")
-        self.assertIn("'NonExistent' not found", data["message"])
-        self.assertIn("Cube", data["message"])
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+        self.assertIn("'NonExistent'", data["message"])
+        self.assertIn("Cube", data["current_state"]["available_objects"])
+        self.assertIsInstance(data["hint"], str)
+        self.assertTrue(data["hint"])
 
     def test_get_objects_summary(self) -> None:
         data = self._test_tool("get_objects_summary")
@@ -944,7 +947,12 @@ class _TestServerMixin:
             return
         data = self._test_tool("jump_to_tab_by_name", {"name": "NonExistent"})
         self.assertEqual(data["status"], "error")
-        self.assertIsInstance(data["available_workspaces"], list)
+        self.assertEqual(data["error_code"], "WORKSPACE_NOT_FOUND")
+        self.assertIsInstance(
+            data["current_state"]["available_workspaces"], list
+        )
+        self.assertIsInstance(data["hint"], str)
+        self.assertTrue(data["hint"])
 
     def test_execute_blender_code_for_cli_error(self) -> None:
         self._call_tool_expect_error("execute_blender_code_for_cli", {
@@ -957,14 +965,22 @@ class _TestServerMixin:
             return
         data = self._test_tool("jump_to_view3d_object_by_name", {"name": "NonExistent"})
         self.assertEqual(data["status"], "error")
-        self.assertEqual(data["message"], "Object 'NonExistent' not found")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+        self.assertIn("'NonExistent'", data["message"])
+        self.assertIn("Cube", data["current_state"]["available_objects"])
+        self.assertIsInstance(data["hint"], str)
+        self.assertTrue(data["hint"])
 
     def test_jump_to_view3d_object_data_by_name_error(self) -> None:
         if not self._interactive:
             return
         data = self._test_tool("jump_to_view3d_object_data_by_name", {"name": "NonExistent"})
         self.assertEqual(data["status"], "error")
-        self.assertEqual(data["message"], "No object found with data named 'NonExistent'")
+        self.assertEqual(data["error_code"], "DATA_NOT_FOUND")
+        self.assertIn("'NonExistent'", data["message"])
+        self.assertIsInstance(data["current_state"]["available_data_names"], list)
+        self.assertIsInstance(data["hint"], str)
+        self.assertTrue(data["hint"])
 
     # -----------------------------------------------------------------
     # State verification.

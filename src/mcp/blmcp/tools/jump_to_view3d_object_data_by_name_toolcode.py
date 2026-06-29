@@ -14,6 +14,9 @@ __all__ = (
 
 from typing import Any, NamedTuple
 
+# @include_begin: _template_tool_error.py
+# @include_end
+
 
 class Params(NamedTuple):
     name: str
@@ -22,20 +25,32 @@ class Params(NamedTuple):
 
 class Result(NamedTuple):
     status: str
-    object: str | None = None
-    data_name: str | None = None
-    type: str | None = None
-    location: list[float] | None = None
+    object: str
+    data_name: str
+    type: str
+    location: list[float]
     message: str | None = None
 
 
-def main(params: Params) -> Result:
+def main(params: Params) -> "Result | ErrorResult":
     import bpy  # pylint: disable=import-error,no-name-in-module
 
     if bpy.app.background:
-        return Result(status="error", message="Not available in background mode")
+        return ErrorResult(
+            status="error",
+            error_code="BACKGROUND_MODE",
+            message="Not available in background mode.",
+            current_state={},
+            hint="Rerun with an interactive Blender session.",
+        )
     if bpy.context.window is None:
-        return Result(status="error", message="No active window")
+        return ErrorResult(
+            status="error",
+            error_code="NO_ACTIVE_WINDOW",
+            message="No active window.",
+            current_state={},
+            hint="Ensure Blender has a visible window.",
+        )
 
     target = None
     for obj in bpy.data.objects:
@@ -43,9 +58,18 @@ def main(params: Params) -> Result:
             target = obj
             break
     if target is None:
-        return Result(
+        available = sorted(
+            {obj.data.name for obj in bpy.data.objects if obj.data is not None}
+        )
+        return ErrorResult(
             status="error",
-            message="No object found with data named {!r}".format(params.name),
+            error_code="DATA_NOT_FOUND",
+            message="No object found with data named {!r}.".format(params.name),
+            current_state={"available_data_names": available},
+            hint=(
+                "Use a name from `current_state.available_data_names`, "
+                "or call `get_objects_summary` to inspect the scene."
+            ),
         )
 
     if params.allow_edits:
@@ -79,7 +103,6 @@ def main(params: Params) -> Result:
     for area in bpy.context.screen.areas:
         if area.type == "VIEW_3D":
             view3d_found = True
-            # Exit camera view so the user sees the object in a free viewport.
             r3d = area.spaces.active.region_3d
             if r3d and r3d.view_perspective == "CAMERA":
                 r3d.view_perspective = "PERSP"
@@ -96,5 +119,7 @@ def main(params: Params) -> Result:
         data_name=params.name,
         type=target.type,
         location=list(target.location),
-        message=None if view3d_found else "No 3D viewport found, object selected but not framed",
+        message=None if view3d_found else (
+            "No 3D viewport found, object selected but not framed"
+        ),
     )
