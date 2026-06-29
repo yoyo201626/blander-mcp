@@ -272,6 +272,12 @@ src/mcp/blmcp/
 | `tools/gp_layers_list.py / _toolcode.py` | REQ-03 GP 图层列表 |
 | `tools/gp_stroke_draw.py / _toolcode.py` | REQ-04 笔触绘制（自由坐标） |
 | `tools/gp_shape_draw.py / _toolcode.py` | REQ-04 预制形状（rect/circle） |
+| `tools/gp_material_create.py / _toolcode.py` | REQ-05 GP 材质创建 |
+| `tools/gp_material_assign.py / _toolcode.py` | REQ-05 GP 材质分配 |
+| `tools/gp_layer_opacity_set.py / _toolcode.py` | REQ-06 图层透明度关键帧 |
+| `tools/gp_layer_keyframes_list.py / _toolcode.py` | REQ-06 读取透明度关键帧 |
+| `tools/render_frame.py / _toolcode.py` | REQ-07 单帧渲染为图片 |
+| `tools/render_animation.py / _toolcode.py` | REQ-07 帧序列渲染为视频 |
 
 **本项目改过（需手动 diff 再合并）：**
 

@@ -982,6 +982,154 @@ EXPECTED_TOOLS = [
         }
     },
     {
+        "name": "render_animation",
+        "description": "\n"
+        "Render a frame sequence and write a video file (H.264 / MPEG-4).\n"
+        "\n"
+        "``output_path`` sets the destination.  Absolute paths are used\n"
+        "as-is; relative paths are placed inside Blender's temp directory.\n"
+        "The file extension should be ``.mp4``.\n"
+        "\n"
+        "Optional overrides (all default to current scene settings):\n"
+        "\n"
+        "- ``frame_start`` / ``frame_end``: inclusive frame range to render.\n"
+        "  Both default to ``scene.frame_start`` / ``scene.frame_end``.\n"
+        "- ``width`` / ``height``: render resolution in pixels.\n"
+        "  Internally sets ``resolution_percentage = 100``.\n"
+        "- ``fps``: frames-per-second.  Overrides ``scene.render.fps`` and\n"
+        "  sets ``fps_base`` to 1.\n"
+        "\n"
+        "Video encoding uses H.264 in an MPEG-4 container with no audio.\n"
+        "On Blender 5.1+, ``image_settings.media_type = 'VIDEO'`` is used;\n"
+        "older builds fall back to ``file_format = 'FFMPEG'``.\n"
+        "All settings are restored after the render.\n"
+        "\n"
+        "Returns ``filepath``, ``frame_start``, ``frame_end``, ``width``,\n"
+        "``height``, and ``fps`` in the success result.\n",
+        "inputSchema": {
+            "properties": {
+                "output_path": {
+                    "title": "Output Path",
+                    "type": "string"
+                },
+                "frame_start": {
+                    "anyOf": [
+                        {"type": "integer"},
+                        {"type": "null"}
+                    ],
+                    "default": None,
+                    "title": "Frame Start"
+                },
+                "frame_end": {
+                    "anyOf": [
+                        {"type": "integer"},
+                        {"type": "null"}
+                    ],
+                    "default": None,
+                    "title": "Frame End"
+                },
+                "width": {
+                    "anyOf": [
+                        {"type": "integer"},
+                        {"type": "null"}
+                    ],
+                    "default": None,
+                    "title": "Width"
+                },
+                "height": {
+                    "anyOf": [
+                        {"type": "integer"},
+                        {"type": "null"}
+                    ],
+                    "default": None,
+                    "title": "Height"
+                },
+                "fps": {
+                    "anyOf": [
+                        {"type": "integer"},
+                        {"type": "null"}
+                    ],
+                    "default": None,
+                    "title": "Fps"
+                }
+            },
+            "required": [
+                "output_path"
+            ],
+            "title": "render_animationArguments",
+            "type": "object"
+        }
+    },
+    {
+        "name": "render_frame",
+        "description": "\n"
+        "Render a single frame of the current scene to an image file.\n"
+        "\n"
+        "``output_path`` sets the destination. Absolute paths are used\n"
+        "as-is; relative paths are placed inside Blender's temp directory.\n"
+        "\n"
+        "Optional overrides (all default to the current scene settings):\n"
+        "\n"
+        "- ``frame``: scene frame number to render (``None`` = current frame).\n"
+        "- ``width`` / ``height``: render resolution in pixels; both default\n"
+        "  to the scene resolution.  If only one is provided the other keeps\n"
+        "  the scene value.  Set ``resolution_percentage`` to 100 internally\n"
+        "  so the values are exact.\n"
+        "- ``fps``: frames-per-second; overrides ``scene.render.fps`` and\n"
+        "  sets ``fps_base`` to 1.\n"
+        "\n"
+        "All overrides are temporary and are restored after the render.\n"
+        "\n"
+        "Returns ``filepath``, ``frame``, ``width``, ``height``, and ``fps``\n"
+        "in the success result.  Returns an error if Blender's render\n"
+        "operator raises a ``RuntimeError``.\n",
+        "inputSchema": {
+            "properties": {
+                "output_path": {
+                    "title": "Output Path",
+                    "type": "string"
+                },
+                "frame": {
+                    "anyOf": [
+                        {"type": "integer"},
+                        {"type": "null"}
+                    ],
+                    "default": None,
+                    "title": "Frame"
+                },
+                "width": {
+                    "anyOf": [
+                        {"type": "integer"},
+                        {"type": "null"}
+                    ],
+                    "default": None,
+                    "title": "Width"
+                },
+                "height": {
+                    "anyOf": [
+                        {"type": "integer"},
+                        {"type": "null"}
+                    ],
+                    "default": None,
+                    "title": "Height"
+                },
+                "fps": {
+                    "anyOf": [
+                        {"type": "integer"},
+                        {"type": "null"}
+                    ],
+                    "default": None,
+                    "title": "Fps"
+                }
+            },
+            "required": [
+                "output_path"
+            ],
+            "title": "render_frameArguments",
+            "type": "object"
+        }
+    },
+    {
         "name": "render_thumbnail_to_path",
         "description": "\n"
         "Render a small, low-quality thumbnail to *output_path* (temporarily overrides settings).\n",

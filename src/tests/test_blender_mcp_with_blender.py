@@ -1228,6 +1228,62 @@ class _TestServerMixin:
         self.assertTrue(data["filepath"].endswith("render.png"))
         self._assert_valid_png(data["filepath"])
 
+    def test_render_frame_basic(self) -> None:
+        self._set_cycles_cpu()
+        data = self._test_tool("render_frame", {
+            "output_path": "frame.png",
+            "width": 64,
+            "height": 64,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertTrue(data["filepath"].endswith("frame.png"))
+        self.assertEqual(data["width"], 64)
+        self.assertEqual(data["height"], 64)
+        self._assert_valid_png(data["filepath"])
+
+    def test_render_frame_with_frame_override(self) -> None:
+        self._set_cycles_cpu()
+        data = self._test_tool("render_frame", {
+            "output_path": "frame10.png",
+            "frame": 10,
+            "width": 64,
+            "height": 64,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["frame"], 10)
+        self._assert_valid_png(data["filepath"])
+
+    def test_render_animation_basic(self) -> None:
+        self._set_cycles_cpu()
+
+        def _setup_short_anim() -> None:
+            import bpy  # type: ignore[import-not-found]
+            bpy.context.scene.frame_start = 1
+            bpy.context.scene.frame_end = 2
+            result = {"frame_start": bpy.context.scene.frame_start}  # noqa: F841
+
+        self._test_tool("execute_blender_code", {
+            "code": _python_fn_body_as_string(_setup_short_anim),
+        })
+
+        output = os.path.join(tempfile.gettempdir(), "blender_mcp_test_anim.mp4")
+        data = self._test_tool("render_animation", {
+            "output_path": output,
+            "frame_start": 1,
+            "frame_end": 2,
+            "width": 64,
+            "height": 64,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["frame_start"], 1)
+        self.assertEqual(data["frame_end"], 2)
+        self.assertEqual(data["width"], 64)
+        self.assertEqual(data["height"], 64)
+        # Verify output file exists and has content.
+        filepath = data["filepath"]
+        self.assertTrue(os.path.exists(filepath), f"Video file missing: {filepath}")
+        self.assertGreater(os.path.getsize(filepath), 0)
+
     # -----------------------------------------------------------------
     # Deferred tool response.
 
