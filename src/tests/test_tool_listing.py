@@ -474,6 +474,88 @@ EXPECTED_TOOLS = [
         }
     },
     {
+        "name": "gp_layer_keyframes_list",
+        "description": "\n"
+        "Return all opacity keyframes on a Grease Pencil layer, sorted by frame.\n"
+        "\n"
+        "Each entry in ``keyframes`` contains:\n"
+        "\n"
+        "- ``frame``: the scene frame number (integer).\n"
+        "- ``opacity``: the opacity value at that frame (float, 0.0–1.0).\n"
+        "\n"
+        "Returns an empty ``keyframes`` list if no opacity keyframes have\n"
+        "been set on this layer yet.\n"
+        "\n"
+        "Use ``gp_layer_opacity_set`` to insert keyframes, then call\n"
+        "this tool to verify the animation curve before rendering.\n"
+        "\n"
+        "Returns an error if the object or layer is not found.\n",
+        "inputSchema": {
+            "properties": {
+                "object_name": {
+                    "title": "Object Name",
+                    "type": "string"
+                },
+                "layer_name": {
+                    "title": "Layer Name",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "object_name",
+                "layer_name"
+            ],
+            "title": "gp_layer_keyframes_listArguments",
+            "type": "object"
+        }
+    },
+    {
+        "name": "gp_layer_opacity_set",
+        "description": "\n"
+        "Set the opacity of a Grease Pencil layer and insert a keyframe.\n"
+        "\n"
+        "``opacity`` must be in ``[0.0, 1.0]``: ``0.0`` is fully\n"
+        "transparent, ``1.0`` is fully opaque.\n"
+        "\n"
+        "The keyframe is inserted at ``frame`` in the scene timeline.\n"
+        "If a keyframe already exists at that frame it is overwritten.\n"
+        "\n"
+        "Call this multiple times with different ``frame`` values to\n"
+        "build an opacity animation.  Use ``gp_layer_keyframes_list``\n"
+        "afterwards to verify the inserted keyframes.\n"
+        "\n"
+        "Returns an error if the object or layer is not found, or if\n"
+        "``opacity`` is outside ``[0.0, 1.0]``.\n",
+        "inputSchema": {
+            "properties": {
+                "object_name": {
+                    "title": "Object Name",
+                    "type": "string"
+                },
+                "layer_name": {
+                    "title": "Layer Name",
+                    "type": "string"
+                },
+                "frame": {
+                    "title": "Frame",
+                    "type": "integer"
+                },
+                "opacity": {
+                    "title": "Opacity",
+                    "type": "number"
+                }
+            },
+            "required": [
+                "object_name",
+                "layer_name",
+                "frame",
+                "opacity"
+            ],
+            "title": "gp_layer_opacity_setArguments",
+            "type": "object"
+        }
+    },
+    {
         "name": "gp_layers_list",
         "description": "\n"
         "Return all layers on a Grease Pencil object in their stack order.\n"

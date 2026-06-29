@@ -1042,6 +1042,106 @@ class _TestServerMixin:
         self.assertEqual(data["error_code"], "NOT_GP_MATERIAL")
 
     # -----------------------------------------------------------------
+    # Layer animation tools (REQ-06).
+
+    def _setup_gp_anim_canvas(self) -> None:
+        """Create GP object 'AnimCanvas' with layer 'Outline' for animation tests."""
+        self._test_tool("gp_object_create", {"name": "AnimCanvas"})
+        self._test_tool("gp_layer_create", {
+            "object_name": "AnimCanvas",
+            "layer_name": "Outline",
+        })
+
+    def test_gp_layer_opacity_set_basic(self) -> None:
+        self._setup_gp_anim_canvas()
+        data = self._test_tool("gp_layer_opacity_set", {
+            "object_name": "AnimCanvas",
+            "layer_name": "Outline",
+            "frame": 1,
+            "opacity": 1.0,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "AnimCanvas")
+        self.assertEqual(data["layer_name"], "Outline")
+        self.assertEqual(data["frame"], 1)
+        self.assertAlmostEqual(data["opacity"], 1.0, places=5)
+
+    def test_gp_layer_opacity_set_multiple_frames(self) -> None:
+        self._setup_gp_anim_canvas()
+        self._test_tool("gp_layer_opacity_set", {
+            "object_name": "AnimCanvas",
+            "layer_name": "Outline",
+            "frame": 1,
+            "opacity": 1.0,
+        })
+        data = self._test_tool("gp_layer_opacity_set", {
+            "object_name": "AnimCanvas",
+            "layer_name": "Outline",
+            "frame": 30,
+            "opacity": 0.0,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertAlmostEqual(data["opacity"], 0.0, places=5)
+
+    def test_gp_layer_opacity_set_error_out_of_range(self) -> None:
+        self._setup_gp_anim_canvas()
+        data = self._test_tool("gp_layer_opacity_set", {
+            "object_name": "AnimCanvas",
+            "layer_name": "Outline",
+            "frame": 1,
+            "opacity": 1.5,
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_OPACITY")
+        self.assertIn("current_opacity", data["current_state"])
+
+    def test_gp_layer_keyframes_list_empty(self) -> None:
+        self._setup_gp_anim_canvas()
+        data = self._test_tool("gp_layer_keyframes_list", {
+            "object_name": "AnimCanvas",
+            "layer_name": "Outline",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertIsInstance(data["keyframes"], list)
+        self.assertEqual(len(data["keyframes"]), 0)
+
+    def test_gp_layer_keyframes_list_after_set(self) -> None:
+        self._setup_gp_anim_canvas()
+        self._test_tool("gp_layer_opacity_set", {
+            "object_name": "AnimCanvas",
+            "layer_name": "Outline",
+            "frame": 1,
+            "opacity": 1.0,
+        })
+        self._test_tool("gp_layer_opacity_set", {
+            "object_name": "AnimCanvas",
+            "layer_name": "Outline",
+            "frame": 60,
+            "opacity": 0.0,
+        })
+        data = self._test_tool("gp_layer_keyframes_list", {
+            "object_name": "AnimCanvas",
+            "layer_name": "Outline",
+        })
+        self.assertEqual(data["status"], "ok")
+        kfs = data["keyframes"]
+        self.assertEqual(len(kfs), 2)
+        self.assertEqual(kfs[0]["frame"], 1)
+        self.assertAlmostEqual(kfs[0]["opacity"], 1.0, places=4)
+        self.assertEqual(kfs[1]["frame"], 60)
+        self.assertAlmostEqual(kfs[1]["opacity"], 0.0, places=4)
+
+    def test_gp_layer_keyframes_list_error_layer_not_found(self) -> None:
+        self._test_tool("gp_object_create", {"name": "AnimCanvas"})
+        data = self._test_tool("gp_layer_keyframes_list", {
+            "object_name": "AnimCanvas",
+            "layer_name": "DoesNotExist",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "LAYER_NOT_FOUND")
+        self.assertIsInstance(data["current_state"]["available_layers"], list)
+
+    # -----------------------------------------------------------------
     # Navigation tools.
 
     def test_jump_to_tab_by_name(self) -> None:
