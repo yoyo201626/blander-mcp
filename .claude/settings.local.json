@@ -28,7 +28,14 @@
       "Bash(/Applications/Blender.app/Contents/MacOS/Blender --version)",
       "Bash(python3 *)",
       "PowerShell(Get-ChildItem *)",
-      "PowerShell(\\([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent\\(\\)\\).IsInRole\\([Security.Principal.WindowsBuiltInRole]\"Administrator\"\\))"
+      "PowerShell(\\([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent\\(\\)\\).IsInRole\\([Security.Principal.WindowsBuiltInRole]\"Administrator\"\\))",
+      "Bash(git remote *)",
+      "Bash(git fetch *)",
+      "Bash(git clone *)",
+      "Bash(git -C upstream_tmp pull)",
+      "Bash(git -C upstream_tmp log --oneline -15)",
+      "Bash(git *)",
+      "PowerShell(Remove-Item *)"
     ]
   }
 }

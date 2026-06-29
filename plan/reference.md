@@ -102,34 +102,50 @@ socket.settimeout(30)
 
 ---
 
-## 三、Grease Pencil API 速查
+## 三、Grease Pencil API 速查（GPv3 / Blender 5.1+）
 
 ### 数据层级
 
 ```python
 gp_obj  = bpy.data.objects["gp_canvas"]   # Object
-gp_data = gp_obj.data                      # bpy.types.GreasePencil
+gp_data = gp_obj.data                      # bpy.types.GreasePencil（GPv3）
 
 # 图层
 layer = gp_data.layers.new("outline")      # 创建
-layer = gp_data.layers["outline"]          # 获取
+layer = gp_data.layers.get("outline")      # 获取（不存在返回 None）
 layer.opacity = 0.5                        # 不透明度
 layer.hide = True                          # 隐藏
 
-# 帧
-frame = layer.frames.new(1)                # 在第 1 帧创建
-frame = layer.frames.get(1)               # 获取（不存在返回 None）
+# 帧（GPv3 新 API）
+frame = layer.frames.new(1)                # 在第 1 帧创建新帧
+frame = layer.get_frame_at(1)             # 获取已有帧
+# 注意：frames 集合没有 .get() 方法，用 get_frame_at() 替代
 
-# 笔触
-stroke = frame.strokes.new()
-stroke.display_mode = '3DSPACE'            # 必须设置！
-stroke.material_index = 0
-stroke.line_width = 10
+# 绘图（Drawing）—— GPv3 新概念，一帧对应一个 drawing
+drawing = frame.drawing                    # bpy.types.GreasePencilDrawing
 
-# 点
-stroke.points.add(count=3)
-stroke.points[0].co = (0.0, 0.0, 0.0)    # float tuple
-stroke.points[0].pressure = 1.0
+# 笔触（GPv3 新 API，不再用 frame.strokes.new()）
+drawing.add_strokes([3])                   # 添加一个有 3 个点的笔触
+# 总点数 / 总笔触数
+n_pts    = drawing.attributes.domain_size("POINT")
+n_curves = drawing.attributes.domain_size("CURVE")
+
+# 设置点位置（attributes API）
+pos_attr = drawing.attributes["position"]
+pos_attr.data[0].vector = (0.0, 0.0, 0.0)   # 第 0 个点
+
+# 设置点粗细（radius，对象空间单位）
+radius_attr = drawing.attributes["radius"]
+radius_attr.data[0].value = 0.01
+
+# 设置笔触材质（CURVE 域）
+mat_attr = drawing.attributes["material_index"]
+mat_attr.data[0].value = 0    # 第 0 条笔触，材质槽 0
+
+# 删除所有笔触（replace 模式推荐做法：删帧再重建）
+layer.frames.remove(frame.frame_number)
+frame = layer.frames.new(frame_number)
+drawing = frame.drawing
 ```
 
 ### GP 材质
@@ -229,49 +245,108 @@ Blender 内部使用线性颜色空间，输入值会被当作 linear 处理。
 ```
 src/mcp/blmcp/
 ├── __init__.py        ┐
-├── tools/             ├─ 来源①：blender-mcp 仓库自身代码
+├── tools/             ├─ 来源①：blender_mcp 上游仓库（经本项目适配）
 ├── tools_helpers/     ┘
 └── data/
-    ├── api/           ── 来源②：Blender Python API 文档构建产物（RST）
-    └── manual/        ── 来源③：Blender 用户手册仓库（RST）
+    ├── api/           ── 来源②：Blender Python API 文档（RST）
+    └── manual/        ── 来源③：Blender 用户手册（RST）
 ```
 
-`data/` 下的文件不是 blender-mcp 仓库的代码，是用仓库里的辅助脚本从外部同步进来的。
+`data/` 下的文件通过辅助脚本从外部同步，不属于上游仓库的代码。
+
+---
+
+### 本项目与上游的差异
+
+更新前必须了解哪些文件是我们自己加的/改过的，避免被上游覆盖。
+
+**本项目新增（上游不存在，直接保留）：**
+
+| 文件 | 功能 |
+|------|------|
+| `tools/_template_tool_error.py` | REQ-01 结构化错误模板 |
+| `tools/get_scene_state.py / _toolcode.py` | REQ-02 场景状态查询 |
+| `tools/gp_object_create.py / _toolcode.py` | REQ-03 GP 对象创建 |
+| `tools/gp_layer_create.py / _toolcode.py` | REQ-03 GP 图层创建 |
+| `tools/gp_layer_delete.py / _toolcode.py` | REQ-03 GP 图层删除 |
+| `tools/gp_layers_list.py / _toolcode.py` | REQ-03 GP 图层列表 |
+| `tools/gp_stroke_draw.py / _toolcode.py` | REQ-04 笔触绘制（自由坐标） |
+| `tools/gp_shape_draw.py / _toolcode.py` | REQ-04 预制形状（rect/circle） |
+
+**本项目改过（需手动 diff 再合并）：**
+
+| 文件 | 改动原因 |
+|------|----------|
+| `tools/get_object_detail_summary_toolcode.py` | REQ-01 统一错误结构 |
+| `tools/jump_to_tab_by_name_toolcode.py` | REQ-01 统一错误结构 |
+| `tools/jump_to_tab_by_space_type_toolcode.py` | REQ-01 统一错误结构 |
+| `tools/jump_to_view3d_object_by_name_toolcode.py` | REQ-01 统一错误结构 |
+| `tools/jump_to_view3d_object_data_by_name_toolcode.py` | REQ-01 统一错误结构 |
+
+---
 
 ### 更新来源①：核心代码
 
+上游目录结构与本项目有差异（upstream: `mcp/blmcp/` → 本项目: `src/mcp/blmcp/`）。
+
 ```bash
-git clone https://projects.blender.org/blender/blender-mcp.git upstream
+# 1. 克隆上游（--depth 节省时间；已有则 git -C upstream_tmp pull）
+git clone --depth=20 https://projects.blender.org/lab/blender_mcp.git upstream_tmp
 
-# 覆盖核心代码（保留 src/mcp/blmcp/data/ 不动）
-cp -r upstream/mcp/blmcp/__init__.py      src/mcp/blmcp/
-cp -r upstream/mcp/blmcp/tools/           src/mcp/blmcp/
-cp -r upstream/mcp/blmcp/tools_helpers/   src/mcp/blmcp/
+# 2. 查看上游最近变更，了解改了什么
+git -C upstream_tmp log --oneline -15
 
-# 修复 import 路径（upstream 按自己结构写，迁移后会错位）
-# 将所有 `src.mcp.blmcp` 替换为 `blmcp`
+# 3. 同步"未改动"的文件（可直接覆盖）
+cp upstream_tmp/mcp/blmcp/__init__.py           src/mcp/blmcp/
+cp upstream_tmp/mcp/blmcp/tools_helpers/*.py    src/mcp/blmcp/tools_helpers/
+
+# 对 tools/ 下上游有、我们未改动的文件逐个覆盖：
+# cp upstream_tmp/mcp/blmcp/tools/ping.py       src/mcp/blmcp/tools/
+# cp upstream_tmp/mcp/blmcp/tools/ping_toolcode.py  src/mcp/blmcp/tools/
+# ...（按需）
+
+# 4. 对"改过"的文件，先 diff 再手动合并
+diff upstream_tmp/mcp/blmcp/tools/get_object_detail_summary_toolcode.py \
+     src/mcp/blmcp/tools/get_object_detail_summary_toolcode.py
+
+# 5. 修复 import 路径（上游使用 blmcp，本项目相同，通常无需修改）
+#    如发现 from src.mcp.blmcp 前缀，批量替换：
+#    grep -r "src\.mcp\.blmcp" src/mcp/blmcp/
+
+# 6. 清理临时目录
+rm -rf upstream_tmp
 ```
+
+---
 
 ### 更新来源②：API 文档
 
-需要本地 Blender 源码并构建 Python API 文档：
+需要本地 Blender 源码，构建后用脚本同步。
 
 ```bash
-# 在 Blender 源码目录构建 API 文档
-make docs_py
-# 构建产物默认在 doc/python_api/
+# 克隆 Blender 源码（体积大，只需一次）
+git clone --depth=1 https://projects.blender.org/blender/blender.git blender_src
 
-# 用同步脚本复制到项目
-python src/_misc/update_reference_api.py /path/to/blender/doc/python_api/
+# 在 Blender 源码目录构建 Python API 文档
+cd blender_src
+make docs_py
+# 产物默认在 doc/python_api/
+
+# 同步到本项目
+python src/_misc/update_reference_api.py blender_src/doc/python_api/
 ```
+
+---
 
 ### 更新来源③：用户手册
 
 ```bash
-git clone https://projects.blender.org/blender/blender-manual.git
+git clone --depth=1 https://projects.blender.org/blender/blender-manual.git blender_manual
 
-python src/_misc/update_reference_manual.py /path/to/blender-manual/
+python src/_misc/update_reference_manual.py blender_manual/
 ```
+
+---
 
 ### 恢复同步脚本
 
@@ -309,6 +384,6 @@ git show 6294711:references/blender_mcp/_misc/update_reference_manual.py \
 | Blender Python API 文档 | https://docs.blender.org/api/current/ |
 | bpy PyPI 包 | https://pypi.org/project/bpy/ |
 | Blender MCP Server 页面 | https://www.blender.org/lab/mcp-server/ |
-| blender-mcp 源码仓库 | https://projects.blender.org/blender/blender-mcp |
+| blender-mcp 源码仓库 | https://projects.blender.org/lab/blender_mcp |
 | Blender 用户手册仓库 | https://projects.blender.org/blender/blender-manual |
 | Blender 源码仓库 | https://projects.blender.org/blender/blender |

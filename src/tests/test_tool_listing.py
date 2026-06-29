@@ -316,6 +316,24 @@ EXPECTED_TOOLS = [
         }
     },
     {
+        "name": "get_scene_state",
+        "description": "\n"
+        "Return the current scene's timeline parameters and a flat list of\n"
+        "all objects with their name, type, and world-space location.\n"
+        "\n"
+        "Includes ``frame_start``, ``frame_end``, ``frame_current``, and\n"
+        "``fps`` so the AI can plan keyframe placement without a separate\n"
+        "query. Works in both background and interactive Blender sessions.\n"
+        "\n"
+        "Call this at the start of any animation workflow to understand\n"
+        "the scene layout and timeline before issuing further tool calls.\n",
+        "inputSchema": {
+            "properties": {},
+            "title": "get_scene_stateArguments",
+            "type": "object"
+        }
+    },
+    {
         "name": "get_screenshot_of_area_as_image",
         "description": "\n"
         "Take a screenshot of a single Blender area and return it as a PNG image.\n"
@@ -393,6 +411,294 @@ EXPECTED_TOOLS = [
         "inputSchema": {
             "properties": {},
             "title": "get_screenshot_of_window_as_jsonArguments",
+            "type": "object"
+        }
+    },
+    {
+        "name": "gp_layer_create",
+        "description": "\n"
+        "Add a new layer to an existing Grease Pencil object.\n"
+        "\n"
+        "``object_name`` must refer to a ``GREASEPENCIL`` type object\n"
+        "already in the scene (use ``gp_object_create`` to create one).\n"
+        "``layer_name`` is the display name of the new layer.\n"
+        "\n"
+        "Returns an error if the object is not found or is not a\n"
+        "Grease Pencil object. Duplicate layer names are allowed by\n"
+        "Blender and are not treated as errors.\n",
+        "inputSchema": {
+            "properties": {
+                "object_name": {
+                    "title": "Object Name",
+                    "type": "string"
+                },
+                "layer_name": {
+                    "default": "Layer",
+                    "title": "Layer Name",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "object_name"
+            ],
+            "title": "gp_layer_createArguments",
+            "type": "object"
+        }
+    },
+    {
+        "name": "gp_layer_delete",
+        "description": "\n"
+        "Remove a layer from a Grease Pencil object.\n"
+        "\n"
+        "All strokes and keyframes stored on the layer are permanently\n"
+        "deleted. Use ``gp_layers_list`` first to verify the layer name.\n"
+        "\n"
+        "Returns an error if the object or layer is not found.\n",
+        "inputSchema": {
+            "properties": {
+                "object_name": {
+                    "title": "Object Name",
+                    "type": "string"
+                },
+                "layer_name": {
+                    "title": "Layer Name",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "object_name",
+                "layer_name"
+            ],
+            "title": "gp_layer_deleteArguments",
+            "type": "object"
+        }
+    },
+    {
+        "name": "gp_layers_list",
+        "description": "\n"
+        "Return all layers on a Grease Pencil object in their stack order.\n"
+        "\n"
+        "Each layer entry contains ``name``, ``opacity``, and ``hide``.\n"
+        "Layers are listed top-to-bottom as they appear in Blender's\n"
+        "layer panel (index 0 = topmost layer).\n"
+        "\n"
+        "Returns an error if the object is not found or is not a\n"
+        "Grease Pencil object.\n",
+        "inputSchema": {
+            "properties": {
+                "object_name": {
+                    "title": "Object Name",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "object_name"
+            ],
+            "title": "gp_layers_listArguments",
+            "type": "object"
+        }
+    },
+    {
+        "name": "gp_object_create",
+        "description": "\n"
+        "Create a new Grease Pencil object in the active scene.\n"
+        "\n"
+        "Blender deduplicates names automatically: if an object named\n"
+        "``name`` already exists, the new object receives a ``.001`` suffix\n"
+        "(or the next available number). The returned ``name`` field always\n"
+        "reflects the actual name assigned by Blender.\n"
+        "\n"
+        "The object is linked to the scene's root collection.\n"
+        "Call ``gp_layer_create`` next to add at least one drawing layer.\n",
+        "inputSchema": {
+            "properties": {
+                "name": {
+                    "default": "GreasePencil",
+                    "title": "Name",
+                    "type": "string"
+                }
+            },
+            "title": "gp_object_createArguments",
+            "type": "object"
+        }
+    },
+    {
+        "name": "gp_shape_draw",
+        "description": "\n"
+        "Draw a predefined geometric shape on a Grease Pencil layer (GPv3).\n"
+        "\n"
+        "``shape`` must be one of ``\"rect\"`` or ``\"circle\"``.\n"
+        "\n"
+        "For ``\"rect\"``: a closed rectangle centred at (cx, cy, cz) in\n"
+        "the XZ plane. ``width`` is the total X-extent; ``height`` is\n"
+        "the total Z-extent. Both default to ``2.0``.\n"
+        "\n"
+        "For ``\"circle\"``: a polygon approximation of a circle centred\n"
+        "at (cx, cy, cz) in the XZ plane. ``radius`` controls size\n"
+        "(default ``1.0``); ``segments`` controls smoothness (default\n"
+        "``32``).\n"
+        "\n"
+        "For freeform polylines or paths, use ``gp_stroke_draw`` instead.\n"
+        "\n"
+        "``mode`` controls existing strokes on the frame:\n"
+        "\n"
+        "- ``\"replace\"``: clears all strokes before drawing.\n"
+        "- ``\"append\"``: adds the shape alongside existing strokes.\n"
+        "\n"
+        "``stroke_radius`` is the point radius in object-space units\n"
+        "(controls stroke thickness, default ``0.01``).\n"
+        "``material_index`` selects the GP material slot (0-based).\n"
+        "\n"
+        "Returns an error if the object, layer, shape, or mode is invalid.\n",
+        "inputSchema": {
+            "properties": {
+                "object_name": {
+                    "title": "Object Name",
+                    "type": "string"
+                },
+                "layer_name": {
+                    "title": "Layer Name",
+                    "type": "string"
+                },
+                "frame": {
+                    "title": "Frame",
+                    "type": "integer"
+                },
+                "shape": {
+                    "title": "Shape",
+                    "type": "string"
+                },
+                "cx": {
+                    "default": 0.0,
+                    "title": "Cx",
+                    "type": "number"
+                },
+                "cy": {
+                    "default": 0.0,
+                    "title": "Cy",
+                    "type": "number"
+                },
+                "cz": {
+                    "default": 0.0,
+                    "title": "Cz",
+                    "type": "number"
+                },
+                "radius": {
+                    "default": 1.0,
+                    "title": "Radius",
+                    "type": "number"
+                },
+                "width": {
+                    "default": 2.0,
+                    "title": "Width",
+                    "type": "number"
+                },
+                "height": {
+                    "default": 2.0,
+                    "title": "Height",
+                    "type": "number"
+                },
+                "segments": {
+                    "default": 32,
+                    "title": "Segments",
+                    "type": "integer"
+                },
+                "mode": {
+                    "default": "replace",
+                    "title": "Mode",
+                    "type": "string"
+                },
+                "stroke_radius": {
+                    "default": 0.01,
+                    "title": "Stroke Radius",
+                    "type": "number"
+                },
+                "material_index": {
+                    "default": 0,
+                    "title": "Material Index",
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "object_name",
+                "layer_name",
+                "frame",
+                "shape"
+            ],
+            "title": "gp_shape_drawArguments",
+            "type": "object"
+        }
+    },
+    {
+        "name": "gp_stroke_draw",
+        "description": "\n"
+        "Draw a stroke on a Grease Pencil layer at the given frame (GPv3).\n"
+        "\n"
+        "``points`` is a list of ``[x, y, z]`` coordinates defining the\n"
+        "stroke path. Provide two points for a straight line; three or more\n"
+        "for a curve or polyline. Blender uses a right-hand coordinate system:\n"
+        "X right, Y into the screen, Z up. For 2D animation draw in the XZ\n"
+        "plane (Y = 0) and place the camera along -Y.\n"
+        "\n"
+        "``mode`` controls existing strokes on that frame:\n"
+        "\n"
+        "- ``\"replace\"``: clears all existing strokes before drawing.\n"
+        "- ``\"append\"``: adds the new stroke alongside existing ones.\n"
+        "\n"
+        "``stroke_radius`` is the point radius in object-space units; it\n"
+        "controls stroke thickness (default ``0.01``).\n"
+        "\n"
+        "``material_index`` selects the GP material slot (0-based).\n"
+        "\n"
+        "The frame is created automatically if it does not exist.\n"
+        "Returns an error if the object, layer, mode, or points are invalid.\n",
+        "inputSchema": {
+            "properties": {
+                "object_name": {
+                    "title": "Object Name",
+                    "type": "string"
+                },
+                "layer_name": {
+                    "title": "Layer Name",
+                    "type": "string"
+                },
+                "frame": {
+                    "title": "Frame",
+                    "type": "integer"
+                },
+                "points": {
+                    "items": {
+                        "items": {
+                            "type": "number"
+                        },
+                        "type": "array"
+                    },
+                    "title": "Points",
+                    "type": "array"
+                },
+                "mode": {
+                    "default": "replace",
+                    "title": "Mode",
+                    "type": "string"
+                },
+                "stroke_radius": {
+                    "default": 0.01,
+                    "title": "Stroke Radius",
+                    "type": "number"
+                },
+                "material_index": {
+                    "default": 0,
+                    "title": "Material Index",
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "object_name",
+                "layer_name",
+                "frame",
+                "points"
+            ],
+            "title": "gp_stroke_drawArguments",
             "type": "object"
         }
     },

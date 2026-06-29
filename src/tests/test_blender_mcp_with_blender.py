@@ -747,6 +747,223 @@ class _TestServerMixin:
         self.assertEqual(data["frame_end"], 120)
 
     # -----------------------------------------------------------------
+    # Grease Pencil tools (REQ-03).
+
+    def test_gp_object_create(self) -> None:
+        data = self._test_tool("gp_object_create", {"name": "Canvas"})
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["name"], "Canvas")
+        self.assertIsInstance(data["collection"], str)
+
+    def test_gp_object_create_deduplication(self) -> None:
+        """Second object with the same name gets a .001 suffix."""
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        data = self._test_tool("gp_object_create", {"name": "Canvas"})
+        self.assertEqual(data["status"], "ok")
+        self.assertNotEqual(data["name"], "Canvas")
+        self.assertTrue(data["name"].startswith("Canvas"))
+
+    def test_gp_layer_create(self) -> None:
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        data = self._test_tool("gp_layer_create", {
+            "object_name": "Canvas",
+            "layer_name": "Lines",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "Canvas")
+        self.assertEqual(data["layer_name"], "Lines")
+
+    def test_gp_layers_list(self) -> None:
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        self._test_tool("gp_layer_create", {
+            "object_name": "Canvas", "layer_name": "Lines",
+        })
+        self._test_tool("gp_layer_create", {
+            "object_name": "Canvas", "layer_name": "Fill",
+        })
+        data = self._test_tool("gp_layers_list", {"object_name": "Canvas"})
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "Canvas")
+        names = [l["name"] for l in data["layers"]]
+        self.assertIn("Lines", names)
+        self.assertIn("Fill", names)
+        for layer in data["layers"]:
+            self.assertIn("name", layer)
+            self.assertIn("opacity", layer)
+            self.assertIn("hide", layer)
+
+    def test_gp_layer_delete(self) -> None:
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        self._test_tool("gp_layer_create", {
+            "object_name": "Canvas", "layer_name": "Lines",
+        })
+        data = self._test_tool("gp_layer_delete", {
+            "object_name": "Canvas",
+            "layer_name": "Lines",
+        })
+        self.assertEqual(data["status"], "ok")
+        # Verify the layer is gone.
+        list_data = self._test_tool("gp_layers_list", {"object_name": "Canvas"})
+        names = [l["name"] for l in list_data["layers"]]
+        self.assertNotIn("Lines", names)
+
+    def test_gp_object_create_error_not_gp(self) -> None:
+        """gp_layer_create rejects non-GP objects."""
+        data = self._test_tool("gp_layer_create", {
+            "object_name": "Cube",
+            "layer_name": "Lines",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_OBJECT_TYPE")
+        self.assertIsInstance(data["hint"], str)
+
+    def test_gp_layer_create_object_not_found(self) -> None:
+        data = self._test_tool("gp_layer_create", {
+            "object_name": "NonExistent",
+            "layer_name": "Lines",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+        self.assertIsInstance(data["current_state"]["available_gp_objects"], list)
+
+    def test_gp_layer_delete_layer_not_found(self) -> None:
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        data = self._test_tool("gp_layer_delete", {
+            "object_name": "Canvas",
+            "layer_name": "DoesNotExist",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "LAYER_NOT_FOUND")
+        self.assertIsInstance(data["current_state"]["available_layers"], list)
+
+    # -----------------------------------------------------------------
+    # Stroke drawing tools (REQ-04).
+
+    def _setup_gp_canvas(self) -> None:
+        """Create a fresh GP object named 'Canvas' with one layer 'Strokes'."""
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        self._test_tool("gp_layer_create", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+        })
+
+    def test_gp_stroke_draw_basic(self) -> None:
+        self._setup_gp_canvas()
+        data = self._test_tool("gp_stroke_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "points": [[-1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "Canvas")
+        self.assertEqual(data["layer_name"], "Strokes")
+        self.assertEqual(data["frame"], 1)
+        self.assertGreaterEqual(data["stroke_count"], 1)
+
+    def test_gp_stroke_draw_replace(self) -> None:
+        self._setup_gp_canvas()
+        self._test_tool("gp_stroke_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "points": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            "mode": "replace",
+        })
+        data = self._test_tool("gp_stroke_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "points": [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]],
+            "mode": "replace",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["stroke_count"], 1)
+
+    def test_gp_stroke_draw_append(self) -> None:
+        self._setup_gp_canvas()
+        self._test_tool("gp_stroke_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "points": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            "mode": "replace",
+        })
+        data = self._test_tool("gp_stroke_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "points": [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]],
+            "mode": "append",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["stroke_count"], 2)
+
+    def test_gp_stroke_draw_error_layer_not_found(self) -> None:
+        self._test_tool("gp_object_create", {"name": "Canvas"})
+        data = self._test_tool("gp_stroke_draw", {
+            "object_name": "Canvas",
+            "layer_name": "NoSuchLayer",
+            "frame": 1,
+            "points": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "LAYER_NOT_FOUND")
+        self.assertIsInstance(data["current_state"]["available_layers"], list)
+        self.assertIsInstance(data["hint"], str)
+
+    def test_gp_stroke_draw_error_invalid_points(self) -> None:
+        self._setup_gp_canvas()
+        data = self._test_tool("gp_stroke_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "points": [],
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_POINTS")
+
+    def test_gp_shape_draw_rect(self) -> None:
+        self._setup_gp_canvas()
+        data = self._test_tool("gp_shape_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "shape": "rect",
+            "cx": 0.0, "cy": 0.0, "cz": 0.0,
+            "width": 2.0, "height": 1.0,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["shape"], "rect")
+        self.assertEqual(data["point_count"], 5)
+
+    def test_gp_shape_draw_circle(self) -> None:
+        self._setup_gp_canvas()
+        data = self._test_tool("gp_shape_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "shape": "circle",
+            "cx": 0.0, "cy": 0.0, "cz": 0.0,
+            "radius": 1.5,
+            "segments": 16,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["shape"], "circle")
+        self.assertEqual(data["point_count"], 17)
+
+    def test_gp_shape_draw_error_invalid_shape(self) -> None:
+        self._setup_gp_canvas()
+        data = self._test_tool("gp_shape_draw", {
+            "object_name": "Canvas",
+            "layer_name": "Strokes",
+            "frame": 1,
+            "shape": "triangle",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_SHAPE")
+
+    # -----------------------------------------------------------------
     # Navigation tools.
 
     def test_jump_to_tab_by_name(self) -> None:
