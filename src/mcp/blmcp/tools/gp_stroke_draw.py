@@ -14,6 +14,7 @@ from blmcp.tools_helpers import (
     toolcode_wrap_with_calling_convention,
 )
 from blmcp.tools_helpers.connection import send_code
+from blmcp.tools.gp_stroke_draw_toolcode import Params
 from mcp.server.fastmcp import FastMCP  # pylint: disable=import-error,no-name-in-module
 from mcp.types import ToolAnnotations  # pylint: disable=import-error,no-name-in-module
 
@@ -58,13 +59,13 @@ def register(mcp: FastMCP) -> None:
         The frame is created automatically if it does not exist.
         Returns an error if the object, layer, mode, or points are invalid.
         """
-        params = {
-            "object_name": object_name,
-            "layer_name": layer_name,
-            "frame": frame,
-            "points": points,
-            "mode": mode,
-            "stroke_radius": stroke_radius,
-            "material_index": material_index,
-        }
-        return send_code(toolcode_format_call(_TOOL_CALL, params), strict_json=True)
+        p = Params(
+            object_name=object_name,
+            layer_name=layer_name,
+            frame=frame,
+            points=points,
+            mode=mode,
+            stroke_radius=stroke_radius,
+            material_index=material_index,
+        )
+        return send_code(toolcode_format_call(_TOOL_CALL, p), strict_json=True)

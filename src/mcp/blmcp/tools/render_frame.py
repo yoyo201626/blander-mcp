@@ -14,6 +14,7 @@ from blmcp.tools_helpers import (
     toolcode_wrap_with_calling_convention,
 )
 from blmcp.tools_helpers.connection import send_code
+from blmcp.tools.render_frame_toolcode import Params
 from mcp.server.fastmcp import FastMCP  # pylint: disable=import-error,no-name-in-module
 from mcp.types import ToolAnnotations  # pylint: disable=import-error,no-name-in-module
 
@@ -56,11 +57,11 @@ def register(mcp: FastMCP) -> None:
         in the success result.  Returns an error if Blender's render
         operator raises a ``RuntimeError``.
         """
-        params = {
-            "output_path": output_path,
-            "frame": frame,
-            "width": width,
-            "height": height,
-            "fps": fps,
-        }
-        return send_code(toolcode_format_call(_TOOL_CALL, params), strict_json=True)
+        p = Params(
+            output_path=output_path,
+            frame=frame,
+            width=width,
+            height=height,
+            fps=fps,
+        )
+        return send_code(toolcode_format_call(_TOOL_CALL, p), strict_json=True)

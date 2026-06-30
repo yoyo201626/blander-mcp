@@ -14,8 +14,9 @@ __all__ = (
 
 import json
 import os
-import select
+import queue
 import subprocess
+import threading
 import time
 from typing import Any, Self
 
@@ -46,6 +47,21 @@ class MCPClient:
             env=env,
         )
         self._next_id = 1
+        # select.select() only works on sockets on Windows, not on pipes.
+        # A background reader thread + queue gives a cross-platform alternative.
+        self._line_queue: queue.Queue[bytes | None] = queue.Queue()
+        self._reader_thread = threading.Thread(
+            target=self._read_stdout, daemon=True,
+        )
+        self._reader_thread.start()
+
+    def _read_stdout(self) -> None:
+        assert self._proc.stdout is not None
+        try:
+            for line in self._proc.stdout:
+                self._line_queue.put(line)
+        finally:
+            self._line_queue.put(None)  # sentinel: server closed stdout
 
     def _send_request(self, method: str, params: dict[str, object] | None = None) -> dict[str, Any]:
         """
@@ -63,7 +79,6 @@ class MCPClient:
             msg["params"] = params
 
         assert self._proc.stdin is not None
-        assert self._proc.stdout is not None
 
         data = json.dumps(msg) + "\n"
         self._proc.stdin.write(data.encode("utf-8"))
@@ -75,15 +90,19 @@ class MCPClient:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise RuntimeError(
-                    "Timeout ({:d}s) waiting for response to {:s}".format(_REQUEST_TIMEOUT, method)
+                    "Timeout ({:d}s) waiting for response to {:s}".format(
+                        _REQUEST_TIMEOUT, method,
+                    )
                 )
-            ready, _, _ = select.select([self._proc.stdout], [], [], remaining)
-            if not ready:
+            try:
+                line = self._line_queue.get(timeout=remaining)
+            except queue.Empty:
                 raise RuntimeError(
-                    "Timeout ({:d}s) waiting for response to {:s}".format(_REQUEST_TIMEOUT, method)
+                    "Timeout ({:d}s) waiting for response to {:s}".format(
+                        _REQUEST_TIMEOUT, method,
+                    )
                 )
-            line = self._proc.stdout.readline()
-            if not line:
+            if line is None:
                 raise RuntimeError("MCP server closed stdout unexpectedly")
             line = line.strip()
             if not line:

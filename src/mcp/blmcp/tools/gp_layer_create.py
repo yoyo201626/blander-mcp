@@ -14,6 +14,7 @@ from blmcp.tools_helpers import (
     toolcode_wrap_with_calling_convention,
 )
 from blmcp.tools_helpers.connection import send_code
+from blmcp.tools.gp_layer_create_toolcode import Params
 from mcp.server.fastmcp import FastMCP  # pylint: disable=import-error,no-name-in-module
 from mcp.types import ToolAnnotations  # pylint: disable=import-error,no-name-in-module
 
@@ -42,5 +43,5 @@ def register(mcp: FastMCP) -> None:
         Grease Pencil object. Duplicate layer names are allowed by
         Blender and are not treated as errors.
         """
-        params = {"object_name": object_name, "layer_name": layer_name}
-        return send_code(toolcode_format_call(_TOOL_CALL, params), strict_json=True)
+        p = Params(object_name=object_name, layer_name=layer_name)
+        return send_code(toolcode_format_call(_TOOL_CALL, p), strict_json=True)

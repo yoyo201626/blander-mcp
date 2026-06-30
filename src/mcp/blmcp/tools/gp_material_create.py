@@ -14,6 +14,7 @@ from blmcp.tools_helpers import (
     toolcode_wrap_with_calling_convention,
 )
 from blmcp.tools_helpers.connection import send_code
+from blmcp.tools.gp_material_create_toolcode import Params
 from mcp.server.fastmcp import FastMCP  # pylint: disable=import-error,no-name-in-module
 from mcp.types import ToolAnnotations  # pylint: disable=import-error,no-name-in-module
 
@@ -56,9 +57,5 @@ def register(mcp: FastMCP) -> None:
         The returned ``name`` is the actual name Blender assigned
         (may differ if a material with that name already exists).
         """
-        params = {
-            "name": name,
-            "stroke_color": stroke_color,
-            "fill_color": fill_color,
-        }
-        return send_code(toolcode_format_call(_TOOL_CALL, params), strict_json=True)
+        p = Params(name=name, stroke_color=stroke_color, fill_color=fill_color)
+        return send_code(toolcode_format_call(_TOOL_CALL, p), strict_json=True)

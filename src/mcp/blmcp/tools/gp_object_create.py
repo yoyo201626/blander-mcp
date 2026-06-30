@@ -14,6 +14,7 @@ from blmcp.tools_helpers import (
     toolcode_wrap_with_calling_convention,
 )
 from blmcp.tools_helpers.connection import send_code
+from blmcp.tools.gp_object_create_toolcode import Params
 from mcp.server.fastmcp import FastMCP  # pylint: disable=import-error,no-name-in-module
 from mcp.types import ToolAnnotations  # pylint: disable=import-error,no-name-in-module
 
@@ -39,6 +40,5 @@ def register(mcp: FastMCP) -> None:
         The object is linked to the scene's root collection.
         Call ``gp_layer_create`` next to add at least one drawing layer.
         """
-        from blmcp.tools_helpers import toolcode_format_call
-        params = {"name": name}
-        return send_code(toolcode_format_call(_TOOL_CALL, params), strict_json=True)
+        p = Params(name=name)
+        return send_code(toolcode_format_call(_TOOL_CALL, p), strict_json=True)

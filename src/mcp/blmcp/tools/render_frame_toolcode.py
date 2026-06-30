@@ -48,16 +48,6 @@ def _backup_attrs_and_assign_multi(
 # @include_end
 
 
-# @include_begin: _template_deferred_tool_check_for_file_output.py
-def _deferred_tool_check_for_file_output(
-        job_type: str,
-        output_path: str,
-        restore_attrs: list[tuple[object, str, object]] | None = None,
-) -> Callable[[], dict[str, object] | None]:
-    return lambda: None
-# @include_end
-
-
 def main(params: Params) -> "Result | Callable[[], dict[str, object] | None]":
     import os
     import bpy  # pylint: disable=import-error,no-name-in-module
@@ -121,10 +111,24 @@ def main(params: Params) -> "Result | Callable[[], dict[str, object] | None]":
             return Result(status="error", message=str(ex))
 
     if use_deferred:
-        return _deferred_tool_check_for_file_output(
-            'RENDER', output_path,
-            restore_attrs=[(rd, "filepath", orig_filepath)],
-        )
+        def _check() -> dict[str, object] | None:
+            if bpy.app.is_job_running('RENDER'):
+                return None
+            rd.filepath = orig_filepath
+            if os.path.exists(output_path):
+                return {
+                    "status": "ok",
+                    "filepath": output_path,
+                    "frame": actual_frame,
+                    "width": actual_w,
+                    "height": actual_h,
+                    "fps": actual_fps,
+                }
+            return {
+                "status": "error",
+                "message": "Render completed but output file was not created",
+            }
+        return _check
 
     rd.filepath = orig_filepath
     return Result(

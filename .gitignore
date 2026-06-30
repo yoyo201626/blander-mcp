@@ -25,3 +25,6 @@ env/
 .DS_Store
 
 blender_addon.zip
+
+# Local dev environment overrides (machine-specific paths).
+src/.env

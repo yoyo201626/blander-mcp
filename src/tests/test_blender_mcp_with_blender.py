@@ -209,6 +209,25 @@ def _stop_headless_display(proc: "subprocess.Popen[bytes]") -> None:
         os.remove(ini_path)
 
 
+def _check_port_reachable(port: int) -> None:
+    """
+    Verify *port* on localhost is open; raise ``RuntimeError`` if not.
+
+    Used in reuse mode to confirm an existing Blender MCP addon is listening
+    before attempting to connect.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(2)
+            sock.connect(("localhost", port))
+    except (ConnectionRefusedError, OSError) as ex:
+        raise RuntimeError(
+            "BLENDER_MCP_REUSE=1 but port {:d} is not reachable: {:s}\n"
+            "Make sure Blender is open with the MCP addon enabled "
+            "and listening on that port.".format(port, str(ex))
+        ) from ex
+
+
 def _wait_for_port(
         port: int,
         timeout: int,
@@ -257,6 +276,8 @@ class _TestServerMixin:
     _interactive: bool = False
     _port: int
 
+    _reuse_mode: bool = False
+
     @classmethod
     def setUpClass(cls) -> None:
         blender_bin = os.environ.get("BLENDER_BIN", "blender")
@@ -266,91 +287,99 @@ class _TestServerMixin:
         tmpdir = cls._tmpdir.name
         cls.addClassCleanup(cls._tmpdir.cleanup)
 
-        env = _blender_env(tmpdir)
+        if cls._reuse_mode:
+            # Reuse mode: skip build / install / Blender launch.
+            # Connect directly to the already-running Blender MCP addon.
+            _check_port_reachable(cls._port)
+            mcp_env = os.environ.copy()
+            mcp_env["BLENDER_MCP_PORT"] = str(cls._port)
+            mcp_env["BLENDER_PATH"] = blender_bin
+        else:
+            env = _blender_env(tmpdir)
 
-        # Build the extension zip.
-        addon_src = os.path.join(_REPO_DIR, "addon", "blender_mcp_addon")
-        _run_blender(
-            [
-                blender_bin, "--command", "extension", "build",
-                "--source-dir=" + addon_src,
-                "--output-dir=" + tmpdir,
-            ],
-            env=env,
-        )
-
-        zips = glob.glob(os.path.join(tmpdir, "mcp-*.zip"))
-        if not zips:
-            raise RuntimeError("Extension build did not produce a zip")
-
-        # Install the extension into the isolated HOME.
-        _run_blender(
-            [
-                blender_bin, "--online-mode", "--background", "--factory-startup",
-                "--command", "extension", "install-file",
-                zips[0], "--repo", "user_default", "--enable",
-            ],
-            env=env,
-        )
-
-        if cls._interactive:
-            # Save preferences before launching so the autostart timer
-            # reads the correct port with no delay.
-            # This could be supported more generically by passing arbitrary
-            # preference overrides, but port and delay are all we need for now.
+            # Build the extension zip.
+            addon_src = os.path.join(_REPO_DIR, "addon", "blender_mcp_addon")
             _run_blender(
                 [
-                    blender_bin, "--background",
-                    "--python-expr",
-                    (
-                        "import bpy; "
-                        "prefs = bpy.context.preferences.addons"
-                        "['bl_ext.user_default.mcp'].preferences; "
-                        "prefs.port = {:d}; "
-                        "prefs.autostart_delay = 0.0; "
-                        "bpy.ops.wm.save_userpref()"
-                    ).format(cls._port),
+                    blender_bin, "--command", "extension", "build",
+                    "--source-dir=" + addon_src,
+                    "--output-dir=" + tmpdir,
                 ],
                 env=env,
             )
 
-        # Start a headless display server for non-background tests.
-        # Registered before Blender so cleanup order is Blender first,
-        # then the display server (LIFO).
-        if not cls._background and not os.environ.get("BLENDER_MCP_FOREGROUND"):
-            cls._weston_proc = _start_headless_display(env)
-            cls.addClassCleanup(_stop_headless_display, cls._weston_proc)
+            zips = glob.glob(os.path.join(tmpdir, "mcp-*.zip"))
+            if not zips:
+                raise RuntimeError("Extension build did not produce a zip")
 
-        # Start Blender with the installed addon.
-        # Omit `--factory-startup` so saved preferences (with the
-        # extension enabled) are loaded from the isolated HOME.
-        blender_args = [blender_bin, "--online-mode"]
-        if cls._background:
-            blender_args.append("--background")
-        # Use Vulkan when not in background mode. OpenGL (llvmpipe) is known
-        # to crash during shader JIT compilation under headless Weston with
-        # recent LLVM/Mesa versions.
-        if not cls._background:
-            blender_args.extend(["--gpu-backend", "vulkan"])
-        if not cls._interactive:
-            blender_args.extend([
-                "--command", "blender_mcp", "--port", str(cls._port),
-            ])
+            # Install the extension into the isolated HOME.
+            _run_blender(
+                [
+                    blender_bin, "--online-mode", "--background", "--factory-startup",
+                    "--command", "extension", "install-file",
+                    zips[0], "--repo", "user_default", "--enable",
+                ],
+                env=env,
+            )
 
-        cls._blender_proc = subprocess.Popen(
-            blender_args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            env=env,
-        )
-        cls.addClassCleanup(cls._cleanup_blender)
+            if cls._interactive:
+                # Save preferences before launching so the autostart timer
+                # reads the correct port with no delay.
+                # This could be supported more generically by passing arbitrary
+                # preference overrides, but port and delay are all we need for now.
+                _run_blender(
+                    [
+                        blender_bin, "--background",
+                        "--python-expr",
+                        (
+                            "import bpy; "
+                            "prefs = bpy.context.preferences.addons"
+                            "['bl_ext.user_default.mcp'].preferences; "
+                            "prefs.port = {:d}; "
+                            "prefs.autostart_delay = 0.0; "
+                            "bpy.ops.wm.save_userpref()"
+                        ).format(cls._port),
+                    ],
+                    env=env,
+                )
 
-        output = _drain_stdout(cls._blender_proc)
-        _wait_for_port(cls._port, _TIMEOUT_STARTUP, cls._blender_proc, output)
+            # Start a headless display server for non-background tests.
+            # Registered before Blender so cleanup order is Blender first,
+            # then the display server (LIFO).
+            if not cls._background and not os.environ.get("BLENDER_MCP_FOREGROUND"):
+                cls._weston_proc = _start_headless_display(env)
+                cls.addClassCleanup(_stop_headless_display, cls._weston_proc)
 
-        mcp_env = _blender_env(tmpdir)
-        mcp_env["BLENDER_MCP_PORT"] = str(cls._port)
-        mcp_env["BLENDER_PATH"] = blender_bin
+            # Start Blender with the installed addon.
+            # Omit `--factory-startup` so saved preferences (with the
+            # extension enabled) are loaded from the isolated HOME.
+            blender_args = [blender_bin, "--online-mode"]
+            if cls._background:
+                blender_args.append("--background")
+            # Use Vulkan when not in background mode. OpenGL (llvmpipe) is known
+            # to crash during shader JIT compilation under headless Weston with
+            # recent LLVM/Mesa versions.
+            if not cls._background:
+                blender_args.extend(["--gpu-backend", "vulkan"])
+            if not cls._interactive:
+                blender_args.extend([
+                    "--command", "blender_mcp", "--port", str(cls._port),
+                ])
+
+            cls._blender_proc = subprocess.Popen(
+                blender_args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=env,
+            )
+            cls.addClassCleanup(cls._cleanup_blender)
+
+            output = _drain_stdout(cls._blender_proc)
+            _wait_for_port(cls._port, _TIMEOUT_STARTUP, cls._blender_proc, output)
+
+            mcp_env = _blender_env(tmpdir)
+            mcp_env["BLENDER_MCP_PORT"] = str(cls._port)
+            mcp_env["BLENDER_PATH"] = blender_bin
 
         cls._client = MCPClient(shlex.split(blender_mcp), env=mcp_env)
         cls.addClassCleanup(cls._client.close)
@@ -1612,6 +1641,29 @@ class TestInteractiveServer(_TestServerMixin, unittest.TestCase):
     _background = False
     _interactive = True
     _port = _PORT_INTERACTIVE
+
+
+class TestReuseServer(_TestServerMixin, unittest.TestCase):
+    """
+    Run tests against an **already-running** Blender with the MCP addon enabled.
+
+    Set ``BLENDER_MCP_REUSE=1`` and run only this class::
+
+        $env:BLENDER_MCP_REUSE = "1"
+        python -m pytest tests/test_blender_mcp_with_blender.py -k TestReuseServer -v
+
+    The socket port is taken from ``BLENDER_MCP_PORT`` (default 9876, the
+    addon's default).  Blender must already be open and the MCP server started
+    inside it before running these tests.
+
+    All tests that apply to an interactive (GUI) Blender are included.
+    Tests that require ``--background`` mode are skipped automatically.
+    """
+
+    _reuse_mode = True
+    _background = False
+    _interactive = True
+    _port = int(os.environ.get("BLENDER_MCP_PORT", str(_PORT_BACKGROUND)))
 
 
 BLENDER_VERSION_MIN = (5, 1)

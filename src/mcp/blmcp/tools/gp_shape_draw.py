@@ -14,6 +14,7 @@ from blmcp.tools_helpers import (
     toolcode_wrap_with_calling_convention,
 )
 from blmcp.tools_helpers.connection import send_code
+from blmcp.tools.gp_shape_draw_toolcode import Params
 from mcp.server.fastmcp import FastMCP  # pylint: disable=import-error,no-name-in-module
 from mcp.types import ToolAnnotations  # pylint: disable=import-error,no-name-in-module
 
@@ -81,27 +82,27 @@ def register(mcp: FastMCP) -> None:
 
         Returns an error if the object, layer, shape, or mode is invalid.
         """
-        params = {
-            "object_name": object_name,
-            "layer_name": layer_name,
-            "frame": frame,
-            "shape": shape,
-            "cx": cx,
-            "cy": cy,
-            "cz": cz,
-            "radius": radius,
-            "width": width,
-            "height": height,
-            "segments": segments,
-            "mode": mode,
-            "stroke_radius": stroke_radius,
-            "material_index": material_index,
-            "x1": x1,
-            "y1": y1,
-            "z1": z1,
-            "x2": x2,
-            "y2": y2,
-            "z2": z2,
-            "points_count": points_count,
-        }
-        return send_code(toolcode_format_call(_TOOL_CALL, params), strict_json=True)
+        p = Params(
+            object_name=object_name,
+            layer_name=layer_name,
+            frame=frame,
+            shape=shape,
+            cx=cx,
+            cy=cy,
+            cz=cz,
+            radius=radius,
+            width=width,
+            height=height,
+            segments=segments,
+            mode=mode,
+            stroke_radius=stroke_radius,
+            material_index=material_index,
+            x1=x1,
+            y1=y1,
+            z1=z1,
+            x2=x2,
+            y2=y2,
+            z2=z2,
+            points_count=points_count,
+        )
+        return send_code(toolcode_format_call(_TOOL_CALL, p), strict_json=True)
