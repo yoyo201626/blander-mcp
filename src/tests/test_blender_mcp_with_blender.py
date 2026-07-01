@@ -2449,6 +2449,123 @@ class _TestServerMixin:
         self.assertEqual(data["status"], "error")
         self.assertEqual(data["error_code"], "INVALID_INTERPOLATION")
 
+    # -----------------------------------------------------------------
+    # Material query tools (REQ-14).
+
+    def test_material_list_default_scene(self) -> None:
+        """Default scene has at least the 'Material' material."""
+        data = self._test_tool("material_list", {})
+        self.assertEqual(data["status"], "ok")
+        self.assertIn("materials", data)
+        self.assertIsInstance(data["materials"], list)
+        # Default Blender scene ships with one material named "Material".
+        names = [m["name"] for m in data["materials"]]
+        self.assertIn("Material", names)
+
+    def test_material_list_includes_new_material(self) -> None:
+        """After creating a new material it appears in material_list."""
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "mat = bpy.data.materials.new('TestMaterialREQ14')\n"
+                "result = {'created': mat.name}\n"
+            ),
+        })
+        data = self._test_tool("material_list", {})
+        self.assertEqual(data["status"], "ok")
+        names = [m["name"] for m in data["materials"]]
+        self.assertIn("TestMaterialREQ14", names)
+
+    def test_material_list_properties_present(self) -> None:
+        """Each material entry has required property keys."""
+        data = self._test_tool("material_list", {})
+        self.assertGreater(len(data["materials"]), 0)
+        for mat in data["materials"]:
+            self.assertIn("name", mat)
+            self.assertIn("use_nodes", mat)
+            self.assertIn("is_grease_pencil", mat)
+            self.assertIn("diffuse_color", mat)
+
+    def test_material_list_principled_bsdf_properties(self) -> None:
+        """A node-based material with Principled BSDF exposes extra props."""
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "mat = bpy.data.materials.new('PBSDFTestMat')\n"
+                "mat.use_nodes = True\n"
+                "principled = mat.node_tree.nodes.get('Principled BSDF')\n"
+                "if principled:\n"
+                "    principled.inputs['Base Color'].default_value = "
+                "(0.8, 0.2, 0.1, 1.0)\n"
+                "result = {'name': mat.name}\n"
+            ),
+        })
+        data = self._test_tool("material_list", {})
+        mats = {m["name"]: m for m in data["materials"]}
+        pbsdf = mats.get("PBSDFTestMat")
+        self.assertIsNotNone(pbsdf, "PBSDFTestMat not found in material_list")
+        self.assertTrue(pbsdf["use_nodes"])
+        self.assertIn("base_color", pbsdf)
+        self.assertAlmostEqual(pbsdf["base_color"][0], 0.8, places=1)
+        self.assertIn("metallic", pbsdf)
+        self.assertIn("roughness", pbsdf)
+
+    def test_material_list_sorted_alphabetically(self) -> None:
+        """Results are in alphabetical order."""
+        data = self._test_tool("material_list", {})
+        names = [m["name"] for m in data["materials"]]
+        self.assertEqual(names, sorted(names))
+
+    def test_object_material_list_default_cube(self) -> None:
+        """Default Cube has one material slot with 'Material'."""
+        data = self._test_tool("object_material_list", {
+            "object_name": "Cube",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "Cube")
+        self.assertIn("slots", data)
+        self.assertGreater(len(data["slots"]), 0)
+        mat_names = [s["material_name"] for s in data["slots"]]
+        self.assertIn("Material", mat_names)
+
+    def test_object_material_list_slot_structure(self) -> None:
+        """Each slot has index, material_name, and is_active keys."""
+        data = self._test_tool("object_material_list", {
+            "object_name": "Cube",
+        })
+        for slot in data["slots"]:
+            self.assertIn("index", slot)
+            self.assertIn("material_name", slot)
+            self.assertIn("is_active", slot)
+
+    def test_object_material_list_updates_after_assign(self) -> None:
+        """After assigning a material via code, object_material_list updates."""
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "obj = bpy.data.objects['Cube']\n"
+                "mat = bpy.data.materials.new('AssignedMat')\n"
+                "obj.data.materials.append(mat)\n"
+                "result = {'slot_count': len(obj.material_slots)}\n"
+            ),
+        })
+        data = self._test_tool("object_material_list", {
+            "object_name": "Cube",
+        })
+        mat_names = [
+            s["material_name"] for s in data["slots"]
+            if s["material_name"] is not None
+        ]
+        self.assertIn("AssignedMat", mat_names)
+
+    def test_object_material_list_error_object_not_found(self) -> None:
+        """Non-existent object returns OBJECT_NOT_FOUND error."""
+        data = self._test_tool("object_material_list", {
+            "object_name": "NoSuchObject",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+
 
 # -----------------------------------------------------------------------------
 # Concrete test classes.
