@@ -248,5 +248,9 @@ AI 无需人工介入即可根据 `hint` 重试。
 
 ### NFR-03：单 Blender 实例
 
-MCP Server 只连接一个本地 Blender 实例，不支持多实例并发。
-超出时返回明确错误，不静默路由。
+- [x] `connection.py` 新增 `_blender_lock = threading.Lock()`，序列化所有 `send_code` 调用
+- [x] 锁忙时立即返回四字段 `BLENDER_BUSY` 错误（不阻塞）
+- [x] `finally` 块确保锁在连接异常时也能正确释放
+- [x] `mcp_client.py` 升级为 per-request queue 路由，支持并发请求 ID 匹配
+- [x] 单元测试（`TestNFR03Unit`）：持锁时返回 BUSY、REQ-01 合规、两线程并发场景、
+      ConnectionError 后锁释放、顺序调用时锁可用

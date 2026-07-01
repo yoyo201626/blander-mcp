@@ -6,6 +6,7 @@
 Simple synchronous MCP client for testing.
 
 Speaks newline-delimited JSON-RPC 2.0 over stdio to a subprocess.
+Supports concurrent calls from multiple threads via per-request queue routing.
 """
 
 __all__ = (
@@ -33,6 +34,10 @@ _TIMEOUT_LOCAL_PROC = int(5 * _TIMEOUT_SCALE)
 class MCPClient:
     """
     Synchronous MCP client that communicates via stdin/stdout with a subprocess.
+
+    Thread-safe: multiple threads may call :meth:`call_tool` concurrently.
+    Responses are routed to their originating thread by request id so that
+    concurrent in-flight requests do not interfere with each other.
     """
 
     def __init__(
@@ -47,9 +52,17 @@ class MCPClient:
             env=env,
         )
         self._next_id = 1
-        # select.select() only works on sockets on Windows, not on pipes.
-        # A background reader thread + queue gives a cross-platform alternative.
+        self._id_lock = threading.Lock()
+        self._write_lock = threading.Lock()
+
+        # Per-request response queues keyed by request id.
+        self._response_queues: dict[int, queue.Queue[dict[str, Any] | None]] = {}
+        self._response_lock = threading.Lock()
+
+        # Fallback queue for messages that arrive without a matching pending id
+        # (e.g. server-initiated notifications).
         self._line_queue: queue.Queue[bytes | None] = queue.Queue()
+
         self._reader_thread = threading.Thread(
             target=self._read_stdout, daemon=True,
         )
@@ -59,16 +72,44 @@ class MCPClient:
         assert self._proc.stdout is not None
         try:
             for line in self._proc.stdout:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    response = json.loads(stripped)
+                    req_id = response.get("id")
+                    if req_id is not None:
+                        with self._response_lock:
+                            q = self._response_queues.get(req_id)
+                        if q is not None:
+                            q.put(response)
+                            continue
+                except json.JSONDecodeError:
+                    pass
+                # Notifications and unrouted messages go to the fallback queue.
                 self._line_queue.put(line)
         finally:
-            self._line_queue.put(None)  # sentinel: server closed stdout
+            # Unblock all waiting threads.
+            with self._response_lock:
+                for q in self._response_queues.values():
+                    q.put(None)
+            self._line_queue.put(None)
 
-    def _send_request(self, method: str, params: dict[str, object] | None = None) -> dict[str, Any]:
+    def _send_request(
+        self,
+        method: str,
+        params: dict[str, object] | None = None,
+    ) -> dict[str, Any]:
         """
         Send a JSON-RPC request and wait for the matching response.
         """
-        request_id = self._next_id
-        self._next_id += 1
+        with self._id_lock:
+            request_id = self._next_id
+            self._next_id += 1
+
+        response_queue: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+        with self._response_lock:
+            self._response_queues[request_id] = response_queue
 
         msg: dict[str, object] = {
             "jsonrpc": "2.0",
@@ -81,47 +122,35 @@ class MCPClient:
         assert self._proc.stdin is not None
 
         data = json.dumps(msg) + "\n"
-        self._proc.stdin.write(data.encode("utf-8"))
-        self._proc.stdin.flush()
+        with self._write_lock:
+            self._proc.stdin.write(data.encode("utf-8"))
+            self._proc.stdin.flush()
 
-        # Read lines until a response with matching id arrives.
-        deadline = time.monotonic() + _REQUEST_TIMEOUT
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise RuntimeError(
-                    "Timeout ({:d}s) waiting for response to {:s}".format(
-                        _REQUEST_TIMEOUT, method,
-                    )
-                )
+        try:
+            deadline = time.monotonic() + _REQUEST_TIMEOUT
+            remaining = max(0.1, deadline - time.monotonic())
             try:
-                line = self._line_queue.get(timeout=remaining)
+                response = response_queue.get(timeout=remaining)
             except queue.Empty:
                 raise RuntimeError(
                     "Timeout ({:d}s) waiting for response to {:s}".format(
                         _REQUEST_TIMEOUT, method,
                     )
                 )
-            if line is None:
+            if response is None:
                 raise RuntimeError("MCP server closed stdout unexpectedly")
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                response = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            # Skip notifications and responses for other requests.
-            if response.get("id") != request_id:
-                continue
-
             if "error" in response:
                 raise RuntimeError("JSON-RPC error: {!r}".format(response["error"]))
-
             return response.get("result", {})
+        finally:
+            with self._response_lock:
+                self._response_queues.pop(request_id, None)
 
-    def _send_notification(self, method: str, params: dict[str, object] | None = None) -> None:
+    def _send_notification(
+        self,
+        method: str,
+        params: dict[str, object] | None = None,
+    ) -> None:
         """
         Send a JSON-RPC notification (no id, no response expected).
         """
@@ -135,8 +164,9 @@ class MCPClient:
         assert self._proc.stdin is not None
 
         data = json.dumps(msg) + "\n"
-        self._proc.stdin.write(data.encode("utf-8"))
-        self._proc.stdin.flush()
+        with self._write_lock:
+            self._proc.stdin.write(data.encode("utf-8"))
+            self._proc.stdin.flush()
 
     def initialize(self) -> dict[str, Any]:
         """

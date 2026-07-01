@@ -3632,6 +3632,170 @@ class _TestServerMixin:
         self.assertEqual(r5["error_code"], "INVALID_PRESET")
         self.assertIn("supported_presets", r5["current_state"])
 
+    # -----------------------------------------------------------------
+    # NFR-03: Single Blender instance — concurrent calls return BLENDER_BUSY.
+
+    def test_nfr03_sequential_calls_always_succeed(self) -> None:
+        """
+        Sequential tool calls (one after another) are never affected by the
+        BLENDER_BUSY guard — the lock releases between calls (NFR-03 positive).
+        """
+        for i in range(5):
+            r = self._test_tool("ping")
+            self.assertEqual(
+                r["status"], "ok",
+                f"Sequential ping call {i + 1} failed: {r!r}",
+            )
+
+
+
+# -----------------------------------------------------------------------------
+# NFR-03 unit tests (no Blender or MCP server required).
+# These tests verify the _blender_lock mechanism in connection.py directly.
+
+class TestNFR03Unit(unittest.TestCase):
+    """
+    Unit-level tests for NFR-03: single-instance serialisation guard.
+
+    These tests import ``blmcp.tools_helpers.connection`` directly and
+    manipulate the module-level lock so there is no dependency on a running
+    Blender or MCP server process.
+    """
+
+    def setUp(self) -> None:
+        from blmcp.tools_helpers import connection
+        # Ensure the lock is always released at the start of each test,
+        # even if a previous test left it held due to an exception.
+        if connection._blender_lock.locked():
+            connection._blender_lock.release()
+
+    def test_busy_error_returned_when_lock_held(self) -> None:
+        """
+        When _blender_lock is already held, send_code returns BLENDER_BUSY
+        immediately without attempting a socket connection (NFR-03).
+        """
+        from blmcp.tools_helpers import connection
+
+        connection._blender_lock.acquire()
+        try:
+            result = connection.send_code("# test", strict_json=False)
+        finally:
+            connection._blender_lock.release()
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error_code"], "BLENDER_BUSY")
+
+    def test_busy_error_req01_compliant(self) -> None:
+        """
+        The BLENDER_BUSY error response includes all four REQ-01 fields
+        (error_code / message / current_state / hint).
+        """
+        from blmcp.tools_helpers import connection
+
+        connection._blender_lock.acquire()
+        try:
+            result = connection.send_code("# test", strict_json=False)
+        finally:
+            connection._blender_lock.release()
+
+        for field in ("error_code", "message", "current_state", "hint"):
+            self.assertIn(field, result,
+                          "REQ-01 field '{:s}' missing from BLENDER_BUSY".format(field))
+
+        self.assertEqual(result["error_code"], "BLENDER_BUSY")
+        self.assertIsInstance(result["message"], str)
+        self.assertTrue(result["message"], "message must be non-empty")
+        self.assertIsInstance(result["current_state"], dict)
+        self.assertTrue(result["current_state"],
+                        "current_state must be a non-empty dict")
+        self.assertIn("blender_host", result["current_state"])
+        self.assertIn("blender_port", result["current_state"])
+        self.assertIsInstance(result["hint"], str)
+        self.assertTrue(len(result["hint"]) > 5,
+                        "hint must be a meaningful string")
+
+    def test_lock_available_between_calls(self) -> None:
+        """
+        The lock is not held between calls — subsequent requests can acquire
+        it normally (NFR-03 positive path, no false BLENDER_BUSY).
+        """
+        from blmcp.tools_helpers import connection
+
+        acquired = connection._blender_lock.acquire(blocking=False)
+        if acquired:
+            connection._blender_lock.release()
+        self.assertTrue(acquired,
+                        "Lock should be free between calls — NFR-03 would "
+                        "return false BLENDER_BUSY for sequential usage")
+
+    def test_lock_released_on_connection_error(self) -> None:
+        """
+        Even when send_code raises ConnectionError (Blender unreachable),
+        the lock is released so subsequent calls are not permanently blocked.
+        """
+        from blmcp.tools_helpers import connection
+
+        # Point at a port where nothing is listening.
+        orig_port = os.environ.get("BLENDER_MCP_PORT")
+        os.environ["BLENDER_MCP_PORT"] = "19999"
+        try:
+            try:
+                connection.send_code("# test", strict_json=False)
+            except ConnectionError:
+                pass  # expected — Blender not running on port 19999
+        finally:
+            if orig_port is None:
+                del os.environ["BLENDER_MCP_PORT"]
+            else:
+                os.environ["BLENDER_MCP_PORT"] = orig_port
+
+        # Lock must be released even after ConnectionError.
+        acquired = connection._blender_lock.acquire(blocking=False)
+        if acquired:
+            connection._blender_lock.release()
+        self.assertTrue(acquired,
+                        "Lock must be released after ConnectionError so "
+                        "subsequent calls are not permanently blocked")
+
+    def test_concurrent_thread_gets_busy(self) -> None:
+        """
+        When one thread holds the lock, a concurrent thread receives
+        BLENDER_BUSY instead of blocking indefinitely (NFR-03 core guarantee).
+        """
+        from blmcp.tools_helpers import connection
+
+        busy_result: list[dict] = []
+        lock_held = threading.Event()
+        release_lock = threading.Event()
+
+        def holder() -> None:
+            connection._blender_lock.acquire()
+            lock_held.set()
+            release_lock.wait(timeout=5)
+            connection._blender_lock.release()
+
+        def caller() -> None:
+            lock_held.wait(timeout=5)
+            busy_result.append(connection.send_code("# test", strict_json=False))
+
+        t_hold = threading.Thread(target=holder)
+        t_call = threading.Thread(target=caller)
+        t_hold.start()
+        t_call.start()
+        t_call.join(timeout=5)
+        release_lock.set()
+        t_hold.join(timeout=5)
+
+        self.assertEqual(len(busy_result), 1,
+                         "caller thread should have received a result")
+        self.assertEqual(busy_result[0]["error_code"], "BLENDER_BUSY")
+
+        # After holder releases, lock is free again.
+        acquired = connection._blender_lock.acquire(blocking=False)
+        if acquired:
+            connection._blender_lock.release()
+        self.assertTrue(acquired, "Lock must be free after holder released it")
+
 
 # -----------------------------------------------------------------------------
 # Concrete test classes.
