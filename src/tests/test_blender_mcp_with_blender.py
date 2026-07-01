@@ -2566,6 +2566,103 @@ class _TestServerMixin:
         self.assertEqual(data["status"], "error")
         self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
 
+    # -----------------------------------------------------------------
+    # Material assignment tool (REQ-15).
+
+    def test_object_material_assign_overwrite_slot0(self) -> None:
+        """Overwriting slot 0 replaces the existing material."""
+        # Create a fresh material.
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "mat = bpy.data.materials.new('NewMat15')\n"
+                "result = {'name': mat.name}\n"
+            ),
+        })
+        data = self._test_tool("object_material_assign", {
+            "object_name": "Cube",
+            "material_name": "NewMat15",
+            "slot_index": 0,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["material_name"], "NewMat15")
+        self.assertEqual(data["slot_index"], 0)
+        self.assertEqual(data["action"], "assigned")
+
+        # Verify via object_material_list.
+        slots = self._test_tool("object_material_list", {"object_name": "Cube"})
+        self.assertEqual(slots["slots"][0]["material_name"], "NewMat15")
+
+    def test_object_material_assign_append(self) -> None:
+        """Appending (slot_index=-1) adds a new slot."""
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "mat = bpy.data.materials.new('AppendMat15')\n"
+                "result = {'name': mat.name}\n"
+            ),
+        })
+        before = self._test_tool("object_material_list", {"object_name": "Cube"})
+        slot_count_before = len(before["slots"])
+
+        data = self._test_tool("object_material_assign", {
+            "object_name": "Cube",
+            "material_name": "AppendMat15",
+            "slot_index": -1,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["action"], "appended")
+        self.assertEqual(data["total_slots"], slot_count_before + 1)
+
+        after = self._test_tool("object_material_list", {"object_name": "Cube"})
+        mat_names = [s["material_name"] for s in after["slots"]]
+        self.assertIn("AppendMat15", mat_names)
+
+    def test_object_material_assign_returns_correct_slot_index(self) -> None:
+        """Appended slot_index equals the new last index."""
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "mat = bpy.data.materials.new('IndexCheckMat')\n"
+                "result = {}\n"
+            ),
+        })
+        before = self._test_tool("object_material_list", {"object_name": "Cube"})
+        expected_index = len(before["slots"])
+
+        data = self._test_tool("object_material_assign", {
+            "object_name": "Cube",
+            "material_name": "IndexCheckMat",
+            "slot_index": -1,
+        })
+        self.assertEqual(data["slot_index"], expected_index)
+
+    def test_object_material_assign_error_object_not_found(self) -> None:
+        data = self._test_tool("object_material_assign", {
+            "object_name": "GhostObject",
+            "material_name": "Material",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+
+    def test_object_material_assign_error_material_not_found(self) -> None:
+        data = self._test_tool("object_material_assign", {
+            "object_name": "Cube",
+            "material_name": "NoSuchMaterial",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "MATERIAL_NOT_FOUND")
+        self.assertIn("available_materials", data["current_state"])
+
+    def test_object_material_assign_error_slot_out_of_range(self) -> None:
+        data = self._test_tool("object_material_assign", {
+            "object_name": "Cube",
+            "material_name": "Material",
+            "slot_index": 99,
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "SLOT_INDEX_OUT_OF_RANGE")
+
 
 # -----------------------------------------------------------------------------
 # Concrete test classes.
