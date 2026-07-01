@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 from collections.abc import Generator
 
 from blmcp.tools_helpers.connection import send_code
@@ -65,13 +66,24 @@ def run_blender_cli(
         '    print("{:s}" + json.dumps(str(ex)))\n'
     ).format(code, _RESULT_PREFIX, _ERROR_PREFIX)
 
+    # On Windows, asyncio's ProactorEventLoop (IOCP) can cause pipe
+    # handles created by subprocess to deadlock when called from a
+    # thread pool.  Explicit DEVNULL for stdin and CREATE_NO_WINDOW
+    # keep Blender's handles isolated from the event loop's IOCP.
+    extra_kwargs: dict[str, object] = {}
+    if sys.platform == "win32":
+        extra_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     try:
         proc = subprocess.run(
-            [blender, "--background", blend_file, "--python-expr", wrapper],
-            capture_output=True,
+            [blender, "--factory-startup", "--background",
+             blend_file, "--python-expr", wrapper],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             timeout=timeout,
             check=False,
+            **extra_kwargs,
         )
     except subprocess.TimeoutExpired as ex:
         raise RuntimeError("Blender CLI timed out after {:.0f}s".format(timeout)) from ex

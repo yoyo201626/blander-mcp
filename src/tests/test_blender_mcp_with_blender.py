@@ -67,6 +67,10 @@ _TIMEOUT_STARTUP = int(int(os.environ.get("BLENDER_MCP_TIMEOUT", "10")) * _TIMEO
 # Maximum time to wait for a local process to respond or exit (seconds).
 _TIMEOUT_LOCAL_PROC = int(10 * _TIMEOUT_SCALE)
 
+# Timeout for tools that run ``blender --background`` (CLI tools).
+# Must be at least as large as blender_cli._CLI_TIMEOUT (120 s) plus startup.
+_TIMEOUT_CLI_TOOL = int(150 * _TIMEOUT_SCALE)
+
 # Tool coverage tracking.
 _all_tools: set[str] = set()
 _tested_tools: set[str] = set()
@@ -386,15 +390,23 @@ class _TestServerMixin:
         cls._client.initialize()
         _all_tools.update(cls._client.list_tools())
 
-        # Save a blend file for CLI tools.
+        # Create a minimal factory-default blend file for CLI tools.
+        # Saves via a fresh --background process rather than the running
+        # interactive Blender, so the file stays small regardless of how
+        # much test data has accumulated in the live session.
         cls._blend_path = os.path.join(tmpdir, "test.blend")
-        cls._client.call_tool("execute_blender_code", {
-            "code": (
-                "import bpy\n"
-                "bpy.ops.wm.save_as_mainfile(filepath={!r})\n"
-                "result = {{'saved': True}}\n"
-            ).format(cls._blend_path),
-        })
+        _run_blender(
+            [
+                blender_bin, "--factory-startup", "--background",
+                "--python-expr",
+                (
+                    "import bpy, sys\n"
+                    "bpy.ops.wm.save_as_mainfile(filepath={!r})\n"
+                    "sys.exit(0)\n"
+                ).format(cls._blend_path),
+            ],
+            env=os.environ.copy(),
+        )
 
     @classmethod
     def _cleanup_blender(cls) -> None:
@@ -406,6 +418,18 @@ class _TestServerMixin:
         if cls._blender_proc.stdout is not None:
             cls._blender_proc.stdout.close()
 
+    @staticmethod
+    def _tool_timeout(name: str) -> int:
+        """Return the appropriate call timeout for *name*.
+
+        Tools that launch ``blender --background`` need a much longer timeout
+        than the default 30 s because Blender CLI startup on Windows can take
+        60-120 s.
+        """
+        if name.endswith("_for_cli"):
+            return _TIMEOUT_CLI_TOOL
+        return 0  # 0 → use MCPClient default
+
     def _call_tool(
         self,
         name: str,
@@ -415,7 +439,8 @@ class _TestServerMixin:
         Call a tool, verify the response is not an error, and return the content list.
         """
         _tested_tools.add(name)
-        result = self._client.call_tool(name, arguments)
+        t = self._tool_timeout(name)
+        result = self._client.call_tool(name, arguments, timeout=t or None)
         content = result.get("content", [])
         self.assertFalse(
             result.get("isError", False),
@@ -437,7 +462,8 @@ class _TestServerMixin:
         Call a tool and assert that the response is an MCP-level error.
         """
         _tested_tools.add(name)
-        result = self._client.call_tool(name, arguments)
+        t = self._tool_timeout(name)
+        result = self._client.call_tool(name, arguments, timeout=t or None)
         self.assertTrue(
             result.get("isError", False),
             "Expected {:s} to return isError".format(name),

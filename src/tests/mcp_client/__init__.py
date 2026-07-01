@@ -99,10 +99,15 @@ class MCPClient:
         self,
         method: str,
         params: dict[str, object] | None = None,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
         """
         Send a JSON-RPC request and wait for the matching response.
+
+        *timeout* overrides the default ``_REQUEST_TIMEOUT`` for this call.
         """
+        effective_timeout = timeout if timeout is not None else _REQUEST_TIMEOUT
+
         with self._id_lock:
             request_id = self._next_id
             self._next_id += 1
@@ -127,14 +132,14 @@ class MCPClient:
             self._proc.stdin.flush()
 
         try:
-            deadline = time.monotonic() + _REQUEST_TIMEOUT
+            deadline = time.monotonic() + effective_timeout
             remaining = max(0.1, deadline - time.monotonic())
             try:
                 response = response_queue.get(timeout=remaining)
             except queue.Empty:
                 raise RuntimeError(
                     "Timeout ({:d}s) waiting for response to {:s}".format(
-                        _REQUEST_TIMEOUT, method,
+                        effective_timeout, method,
                     )
                 )
             if response is None:
@@ -191,14 +196,18 @@ class MCPClient:
         self,
         name: str,
         arguments: dict[str, object] | None = None,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
         """
         Call an MCP tool by name and return the result.
+
+        *timeout* overrides the default per-request timeout for slow tools
+        such as those that launch ``blender --background``.
         """
         params: dict[str, object] = {"name": name}
         if arguments is not None:
             params["arguments"] = arguments
-        return self._send_request("tools/call", params)
+        return self._send_request("tools/call", params, timeout=timeout)
 
     def close(self) -> None:
         """
