@@ -61,7 +61,13 @@ def main(params: Params) -> "Result | ErrorResult":
             status="error",
             error_code="EMPTY_EXPRESSION",
             message="Driver expression must not be empty.",
-            current_state={},
+            current_state={
+                "example_expressions": [
+                    "sin(frame/10)",
+                    "cos(frame/20)",
+                    "frame * 0.1",
+                ],
+            },
             hint=(
                 "Provide a Python expression such as 'sin(frame/10)'. "
                 "The variable 'frame' refers to the current scene frame."
@@ -96,7 +102,11 @@ def main(params: Params) -> "Result | ErrorResult":
                         params.data_path, params.index, exc,
                     )
                 ),
-                current_state={},
+                current_state={
+                    "common_paths": [
+                        "location", "rotation_euler", "scale",
+                    ],
+                },
                 hint=(
                     "Common drivable paths: 'location' (index 0/1/2), "
                     "'rotation_euler' (index 0/1/2), 'scale' (index 0/1/2). "

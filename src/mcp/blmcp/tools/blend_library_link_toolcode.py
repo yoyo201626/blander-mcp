@@ -47,15 +47,8 @@ def _list_available(filepath: str, asset_type: str) -> list[str]:
 def main(params: Params) -> "Result | ErrorResult":
     import bpy  # pylint: disable=import-error,no-name-in-module
 
-    if not os.path.isfile(params.filepath):
-        return ErrorResult(
-            status="error",
-            error_code="FILE_NOT_FOUND",
-            message="Blend file not found: {!r}".format(params.filepath),
-            current_state={},
-            hint="Provide an absolute path to an existing .blend file.",
-        )
-
+    # Validate asset_type before the file-existence check so callers get
+    # the most actionable error when multiple things are wrong.
     asset_type = params.asset_type.upper()
     if asset_type not in _VALID_ASSET_TYPES:
         return ErrorResult(
@@ -69,6 +62,15 @@ def main(params: Params) -> "Result | ErrorResult":
             ),
         )
 
+    if not os.path.isfile(params.filepath):
+        return ErrorResult(
+            status="error",
+            error_code="FILE_NOT_FOUND",
+            message="Blend file not found: {!r}".format(params.filepath),
+            current_state={"valid_asset_types": list(_VALID_ASSET_TYPES)},
+            hint="Provide an absolute path to an existing .blend file.",
+        )
+
     # Verify the asset exists in the file.
     try:
         available = _list_available(params.filepath, asset_type)
@@ -77,7 +79,7 @@ def main(params: Params) -> "Result | ErrorResult":
             status="error",
             error_code="FILE_READ_ERROR",
             message="Cannot read {!r}: {}".format(params.filepath, exc),
-            current_state={},
+            current_state={"valid_asset_types": list(_VALID_ASSET_TYPES)},
             hint="Ensure the file is a valid .blend file.",
         )
 

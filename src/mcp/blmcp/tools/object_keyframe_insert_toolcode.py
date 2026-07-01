@@ -101,7 +101,9 @@ def main(params: Params) -> "Result | ErrorResult":
             status="error",
             error_code="NO_PROPERTIES",
             message="No transform properties specified.",
-            current_state={},
+            current_state={
+                "transform_properties": ["location", "rotation", "scale"],
+            },
             hint="Provide at least one of: location, rotation, scale.",
         )
 

@@ -63,6 +63,11 @@ def main(params: Params) -> "Result | ErrorResult":
             ),
         )
 
+    _COMMON_TYPES = [
+        "SUBSURF", "WAVE", "SOLIDIFY", "BEVEL", "ARRAY",
+        "MIRROR", "BOOLEAN", "DECIMATE", "SKIN",
+    ]
+
     mod_name = params.name or params.modifier_type.capitalize()
     try:
         mod = obj.modifiers.new(name=mod_name, type=params.modifier_type)
@@ -76,10 +81,10 @@ def main(params: Params) -> "Result | ErrorResult":
                     params.modifier_type, exc,
                 )
             ),
-            current_state={},
+            current_state={"common_types": _COMMON_TYPES},
             hint=(
-                "Common types: 'SUBSURF', 'WAVE', 'SOLIDIFY', 'BEVEL', "
-                "'ARRAY', 'MIRROR', 'BOOLEAN', 'DECIMATE', 'SKIN'."
+                "Pick a type from `current_state.common_types`, "
+                "e.g. 'SUBSURF' or 'WAVE'."
             ),
         )
 
@@ -91,7 +96,7 @@ def main(params: Params) -> "Result | ErrorResult":
                 "Modifier type {!r} is not supported for object "
                 "type {!r}.".format(params.modifier_type, obj.type)
             ),
-            current_state={},
+            current_state={"common_types": _COMMON_TYPES},
             hint=(
                 "Most deform and generate modifiers require a MESH object. "
                 "Check the object type with `get_object_detail_summary`."

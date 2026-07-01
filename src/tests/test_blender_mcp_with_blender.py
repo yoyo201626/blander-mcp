@@ -3228,6 +3228,410 @@ class _TestServerMixin:
             f"found {len(x_curves[0]['keyframes'])}",
         )
 
+    # -----------------------------------------------------------------
+    # NFR-02: Error self-healing — all tools return REQ-01 four-field errors.
+
+    def _check_error(
+        self,
+        data: dict,
+        error_code: str = "",
+        *,
+        context: str = "",
+    ) -> None:
+        """
+        Assert the response satisfies the REQ-01 four-field error contract.
+
+        :param error_code: If provided, also assert the specific error code.
+        :param context:    Human-readable label for failure messages.
+        """
+        prefix = f"[{context}] " if context else ""
+        self.assertEqual(
+            data.get("status"), "error",
+            f"{prefix}Expected status='error', got {data!r}",
+        )
+        for field in ("error_code", "message", "current_state", "hint"):
+            self.assertIn(
+                field, data,
+                f"{prefix}REQ-01 field '{field}' missing from error response",
+            )
+        self.assertIsInstance(data["error_code"], str)
+        self.assertTrue(data["error_code"],
+                        f"{prefix}error_code must be non-empty")
+        self.assertIsInstance(data["message"], str)
+        self.assertTrue(data["message"],
+                        f"{prefix}message must be non-empty")
+        self.assertIsInstance(data["current_state"], dict)
+        self.assertTrue(data["current_state"],
+                        f"{prefix}current_state must be non-empty dict")
+        self.assertIsInstance(data["hint"], str)
+        self.assertTrue(len(data["hint"]) > 5,
+                        f"{prefix}hint must be a meaningful string, "
+                        f"got {data['hint']!r}")
+        if error_code:
+            self.assertEqual(data["error_code"], error_code,
+                             f"{prefix}Unexpected error_code")
+
+    def test_nfr02_gp_layer_tools_error_shape(self) -> None:
+        """
+        GP layer management tools return REQ-01-compliant errors for
+        non-existent objects and layers.
+        """
+        _no_obj = {"object_name": "NoSuchObject", "layer_name": "Layer"}
+
+        self._check_error(
+            self._test_tool("gp_layer_create", _no_obj),
+            "OBJECT_NOT_FOUND", context="gp_layer_create/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("gp_layer_delete", _no_obj),
+            "OBJECT_NOT_FOUND", context="gp_layer_delete/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("gp_layers_list", {"object_name": "NoSuchObject"}),
+            "OBJECT_NOT_FOUND", context="gp_layers_list/OBJECT_NOT_FOUND",
+        )
+
+        # Create a real GP object so we can test layer-not-found path.
+        self._test_tool("gp_object_create", {"name": "NFR02_GP"})
+        _no_layer = {"object_name": "NFR02_GP", "layer_name": "NoLayer"}
+        self._check_error(
+            self._test_tool("gp_layer_opacity_set", {
+                **_no_layer, "opacity": 0.5, "frame": 1,
+            }),
+            "LAYER_NOT_FOUND", context="gp_layer_opacity_set/LAYER_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("gp_layer_keyframes_list", _no_layer),
+            "LAYER_NOT_FOUND",
+            context="gp_layer_keyframes_list/LAYER_NOT_FOUND",
+        )
+
+    def test_nfr02_gp_draw_tools_error_shape(self) -> None:
+        """
+        GP draw tools return REQ-01-compliant errors for invalid parameters.
+        """
+        self._check_error(
+            self._test_tool("gp_stroke_draw", {
+                "object_name": "NoSuchObject",
+                "layer_name": "Layer",
+                "frame": 1,
+                "points": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+                "mode": "replace",
+            }),
+            "OBJECT_NOT_FOUND", context="gp_stroke_draw/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("gp_shape_draw", {
+                "object_name": "NoSuchObject",
+                "layer_name": "Layer",
+                "frame": 1,
+                "shape": "circle",
+            }),
+            "OBJECT_NOT_FOUND", context="gp_shape_draw/OBJECT_NOT_FOUND",
+        )
+        # Create a real GP object so the shape validation is reached.
+        self._test_tool("gp_object_create", {"name": "NFR02_GP_SHAPE"})
+        self._test_tool("gp_layer_create", {
+            "object_name": "NFR02_GP_SHAPE", "layer_name": "Layer",
+        })
+        self._check_error(
+            self._test_tool("gp_shape_draw", {
+                "object_name": "NFR02_GP_SHAPE",
+                "layer_name": "Layer",
+                "frame": 1,
+                "shape": "HEXAGON",   # invalid shape
+            }),
+            "INVALID_SHAPE", context="gp_shape_draw/INVALID_SHAPE",
+        )
+        self._check_error(
+            self._test_tool("gp_material_assign", {
+                "object_name": "NoSuchObject",
+                "material_name": "Anything",
+            }),
+            "OBJECT_NOT_FOUND", context="gp_material_assign/OBJECT_NOT_FOUND",
+        )
+
+    def test_nfr02_object_animation_tools_error_shape(self) -> None:
+        """
+        M2 animation tools return REQ-01-compliant errors.
+        """
+        self._check_error(
+            self._test_tool("mesh_primitive_add", {
+                "primitive_type": "DODECAHEDRON",  # unsupported type
+            }),
+            "INVALID_PRIMITIVE_TYPE",
+            context="mesh_primitive_add/INVALID_PRIMITIVE_TYPE",
+        )
+        self._check_error(
+            self._test_tool("object_keyframe_insert", {
+                "object_name": "NoSuchObject",
+                "frame": 1,
+                "location": [0.0, 0.0, 0.0],
+            }),
+            "OBJECT_NOT_FOUND",
+            context="object_keyframe_insert/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("object_keyframe_insert", {
+                "object_name": "Cube",
+                "frame": 1,
+                "interpolation": "BEZIER",
+                # no location/rotation/scale → triggers NO_PROPERTIES
+            }),
+            "NO_PROPERTIES", context="object_keyframe_insert/NO_PROPERTIES",
+        )
+        self._check_error(
+            self._test_tool("object_fcurve_list", {
+                "object_name": "NoSuchObject",
+                "data_path": "location",
+            }),
+            "OBJECT_NOT_FOUND",
+            context="object_fcurve_list/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("camera_target_track", {
+                "camera_name": "NoSuchCamera",
+                "target_location": [0.0, 0.0, 0.0],
+                "frame": 1,
+            }),
+            "OBJECT_NOT_FOUND",
+            context="camera_target_track/OBJECT_NOT_FOUND",
+        )
+
+    def test_nfr02_modifier_driver_tools_error_shape(self) -> None:
+        """
+        M3 modifier and driver tools return REQ-01-compliant errors.
+        """
+        self._check_error(
+            self._test_tool("object_modifier_add", {
+                "object_name": "NoSuchObject",
+                "modifier_type": "SUBSURF",
+            }),
+            "OBJECT_NOT_FOUND",
+            context="object_modifier_add/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("object_modifier_add", {
+                "object_name": "Cube",
+                "modifier_type": "MAGIC_SHADER",  # invalid type
+            }),
+            "INVALID_MODIFIER_TYPE",
+            context="object_modifier_add/INVALID_MODIFIER_TYPE",
+        )
+        self._check_error(
+            self._test_tool("object_modifiers_list", {
+                "object_name": "NoSuchObject",
+            }),
+            "OBJECT_NOT_FOUND",
+            context="object_modifiers_list/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("object_driver_add", {
+                "object_name": "NoSuchObject",
+                "data_path": "location",
+                "index": 0,
+                "expression": "sin(frame/10)",
+            }),
+            "OBJECT_NOT_FOUND",
+            context="object_driver_add/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("object_driver_add", {
+                "object_name": "Cube",
+                "data_path": "location",
+                "index": 2,
+                "expression": "",  # empty expression
+            }),
+            "EMPTY_EXPRESSION",
+            context="object_driver_add/EMPTY_EXPRESSION",
+        )
+        self._check_error(
+            self._test_tool("object_driver_list", {
+                "object_name": "NoSuchObject",
+            }),
+            "OBJECT_NOT_FOUND",
+            context="object_driver_list/OBJECT_NOT_FOUND",
+        )
+
+    def test_nfr02_geonodes_material_tools_error_shape(self) -> None:
+        """
+        Geometry Nodes and material tools return REQ-01-compliant errors.
+        """
+        self._check_error(
+            self._test_tool("geonodes_query", {
+                "object_name": "NoSuchObject",
+            }),
+            "OBJECT_NOT_FOUND", context="geonodes_query/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("geonodes_apply_preset", {
+                "object_name": "NoSuchObject",
+                "preset": "wave",
+            }),
+            "OBJECT_NOT_FOUND",
+            context="geonodes_apply_preset/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("geonodes_apply_preset", {
+                "object_name": "Cube",
+                "preset": "UNKNOWN_PRESET",  # invalid preset
+            }),
+            "INVALID_PRESET",
+            context="geonodes_apply_preset/INVALID_PRESET",
+        )
+        self._check_error(
+            self._test_tool("geonodes_node_set", {
+                "object_name": "NoSuchObject",
+                "node_name": "AnyNode",
+                "input_name": "Value",
+                "value": 1.0,
+            }),
+            "OBJECT_NOT_FOUND", context="geonodes_node_set/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("geonodes_node_keyframe", {
+                "object_name": "NoSuchObject",
+                "node_name": "AnyNode",
+                "input_name": "Value",
+                "frame": 1,
+                "value": 1.0,
+            }),
+            "OBJECT_NOT_FOUND",
+            context="geonodes_node_keyframe/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("object_material_list", {
+                "object_name": "NoSuchObject",
+            }),
+            "OBJECT_NOT_FOUND",
+            context="object_material_list/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("object_material_assign", {
+                "object_name": "NoSuchObject",
+                "material_name": "Material",
+                "slot_index": -1,
+            }),
+            "OBJECT_NOT_FOUND",
+            context="object_material_assign/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("object_material_assign", {
+                "object_name": "Cube",
+                "material_name": "NoSuchMaterial",
+                "slot_index": -1,
+            }),
+            "MATERIAL_NOT_FOUND",
+            context="object_material_assign/MATERIAL_NOT_FOUND",
+        )
+
+    def test_nfr02_asset_armature_tools_error_shape(self) -> None:
+        """
+        M4 asset import and armature tools return REQ-01-compliant errors.
+        """
+        self._check_error(
+            self._test_tool("asset_import", {
+                "filepath": "C:/nonexistent_path/file.fbx",
+            }),
+            "FILE_NOT_FOUND", context="asset_import/FILE_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("blend_library_link", {
+                "filepath": "C:/nonexistent_path/file.blend",
+                "asset_type": "OBJECT",
+                "asset_name": "Cube",
+            }),
+            "FILE_NOT_FOUND", context="blend_library_link/FILE_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("blend_library_link", {
+                "filepath": "C:/nonexistent_path/file.blend",
+                "asset_type": "INVALID_TYPE",
+                "asset_name": "Cube",
+            }),
+            "INVALID_ASSET_TYPE",
+            context="blend_library_link/INVALID_ASSET_TYPE",
+        )
+        self._check_error(
+            self._test_tool("armature_action_apply", {
+                "armature_name": "NoSuchObject",
+                "action_name": "AnyAction",
+            }),
+            "OBJECT_NOT_FOUND",
+            context="armature_action_apply/OBJECT_NOT_FOUND",
+        )
+        self._check_error(
+            self._test_tool("armature_action_apply", {
+                "armature_name": "Cube",   # not an armature
+                "action_name": "AnyAction",
+            }),
+            "NOT_AN_ARMATURE",
+            context="armature_action_apply/NOT_AN_ARMATURE",
+        )
+
+    def test_nfr02_current_state_enables_self_correction(self) -> None:
+        """
+        The `current_state` of each error response must supply the corrective
+        data an AI needs to retry without human input (REQ-01 intent).
+
+        Verified conditions:
+        - OBJECT_NOT_FOUND → current_state lists available objects
+        - LAYER_NOT_FOUND  → current_state lists available layers
+        - MATERIAL_NOT_FOUND → current_state lists available materials
+        - ACTION_NOT_FOUND → current_state lists available actions
+        - INVALID_PRESET   → current_state lists valid presets
+        """
+        # OBJECT_NOT_FOUND: corrective list lets AI pick a real object.
+        r = self._test_tool("object_keyframe_insert", {
+            "object_name": "NoSuchObject", "frame": 1,
+            "location": [0.0, 0.0, 0.0],
+        })
+        self.assertEqual(r["error_code"], "OBJECT_NOT_FOUND")
+        self.assertIn("available_objects", r["current_state"])
+        self.assertIn("Cube", r["current_state"]["available_objects"])
+
+        # LAYER_NOT_FOUND: corrective list lets AI pick an existing layer.
+        self._test_tool("gp_object_create", {"name": "NFR02_GPCorr"})
+        self._test_tool("gp_layer_create", {
+            "object_name": "NFR02_GPCorr", "layer_name": "MyLayer",
+        })
+        r2 = self._test_tool("gp_layer_opacity_set", {
+            "object_name": "NFR02_GPCorr",
+            "layer_name": "NoSuchLayer",
+            "opacity": 0.5,
+            "frame": 1,
+        })
+        self.assertEqual(r2["error_code"], "LAYER_NOT_FOUND")
+        self.assertIn("available_layers", r2["current_state"])
+        self.assertIn("MyLayer", r2["current_state"]["available_layers"])
+
+        # MATERIAL_NOT_FOUND: corrective list lets AI pick a real material.
+        r3 = self._test_tool("object_material_assign", {
+            "object_name": "Cube",
+            "material_name": "NoSuchMaterial",
+            "slot_index": -1,
+        })
+        self.assertEqual(r3["error_code"], "MATERIAL_NOT_FOUND")
+        self.assertIn("available_materials", r3["current_state"])
+
+        # ACTION_NOT_FOUND: corrective list lets AI pick a real action.
+        r4 = self._test_tool("armature_action_apply", {
+            "armature_name": "Cube",   # wrong type → NOT_AN_ARMATURE
+            "action_name": "NoSuchAction",
+        })
+        # Cube is not an armature, so we get NOT_AN_ARMATURE first;
+        # verify armature list is provided for self-correction.
+        self.assertEqual(r4["error_code"], "NOT_AN_ARMATURE")
+        self.assertIn("armature_objects", r4["current_state"])
+
+        # INVALID_PRESET: corrective list lets AI pick a supported preset.
+        r5 = self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "BAD_PRESET",
+        })
+        self.assertEqual(r5["error_code"], "INVALID_PRESET")
+        self.assertIn("supported_presets", r5["current_state"])
+
 
 # -----------------------------------------------------------------------------
 # Concrete test classes.

@@ -237,8 +237,14 @@ AI 无需人工介入即可根据 `hint` 重试。
 
 ### NFR-02：错误自愈
 
-所有工具在参数错误时返回结构完整的错误对象（见 REQ-01），
-`hint` 字段描述足以让 AI 在不询问用户的情况下重试成功。
+- [x] 所有工具错误响应包含四字段（`error_code` / `message` / `current_state` / `hint`）
+- [x] `current_state` 非空，包含 AI 自我纠正所需的可用选项列表
+- [x] `hint` 为有意义的非空字符串（长度 > 5）
+- [x] 修复 6 处 toolcode bug：`asset_import` / `blend_library_link` / `gp_shape_draw` /
+      `object_modifier_add` / `object_driver_add` / `object_keyframe_insert`
+      的部分 error 路径 `current_state={}` 改为提供有用信息
+- [x] `blend_library_link` 参数验证顺序优化：`INVALID_ASSET_TYPE` 先于 `FILE_NOT_FOUND`
+- [x] 覆盖所有里程碑工具的代表性错误路径（GP / 动画 / 修改器 / GeoNodes / 资产导入 / 骨架）
 
 ### NFR-03：单 Blender 实例
 

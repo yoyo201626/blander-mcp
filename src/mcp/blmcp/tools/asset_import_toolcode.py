@@ -93,7 +93,7 @@ def main(params: Params) -> "Result | ErrorResult":
             status="error",
             error_code="FILE_NOT_FOUND",
             message="File not found: {!r}".format(params.filepath),
-            current_state={},
+            current_state={"supported_formats": list(_SUPPORTED_FORMATS)},
             hint="Provide an absolute path to an existing FBX, GLTF, or OBJ file.",
         )
 

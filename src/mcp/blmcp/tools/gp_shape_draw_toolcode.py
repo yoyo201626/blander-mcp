@@ -213,7 +213,7 @@ def main(params: Params) -> "Result | ErrorResult":
             message="shape must be one of {}, got {!r}.".format(
                 _VALID_SHAPES, params.shape
             ),
-            current_state={},
+            current_state={"valid_shapes": list(_VALID_SHAPES)},
             hint=(
                 "Use 'line' for a straight line, 'rect' for a rectangle, "
                 "or 'circle' for a circle. "
@@ -228,7 +228,7 @@ def main(params: Params) -> "Result | ErrorResult":
             message="mode must be 'replace' or 'append', got {!r}.".format(
                 params.mode
             ),
-            current_state={},
+            current_state={"valid_modes": ["replace", "append"]},
             hint=(
                 "Use 'replace' to clear existing strokes on the frame "
                 "before drawing, or 'append' to add alongside them."
