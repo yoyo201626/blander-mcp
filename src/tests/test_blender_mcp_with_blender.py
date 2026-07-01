@@ -1236,6 +1236,94 @@ class _TestServerMixin:
         self.assertEqual(data["type"], "MESH")
 
     # -----------------------------------------------------------------
+    # 3D mesh primitive tools (REQ-08).
+
+    def test_mesh_primitive_add_cube(self) -> None:
+        data = self._test_tool("mesh_primitive_add", {
+            "primitive_type": "CUBE",
+            "name": "MyCube",
+            "location": [1.0, 2.0, 3.0],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["name"], "MyCube")
+        self.assertEqual(data["primitive_type"], "CUBE")
+        loc = data["location"]
+        self.assertAlmostEqual(loc[0], 1.0, places=4)
+        self.assertAlmostEqual(loc[1], 2.0, places=4)
+        self.assertAlmostEqual(loc[2], 3.0, places=4)
+
+    def test_mesh_primitive_add_sphere(self) -> None:
+        data = self._test_tool("mesh_primitive_add", {
+            "primitive_type": "SPHERE",
+            "name": "MySphere",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["name"], "MySphere")
+        self.assertEqual(data["primitive_type"], "SPHERE")
+        self.assertIsInstance(data["location"], list)
+        self.assertEqual(len(data["location"]), 3)
+
+    def test_mesh_primitive_add_plane(self) -> None:
+        data = self._test_tool("mesh_primitive_add", {
+            "primitive_type": "PLANE",
+            "name": "MyPlane",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["name"], "MyPlane")
+        self.assertEqual(data["primitive_type"], "PLANE")
+
+    def test_mesh_primitive_add_cylinder(self) -> None:
+        data = self._test_tool("mesh_primitive_add", {
+            "primitive_type": "CYLINDER",
+            "name": "MyCylinder",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["name"], "MyCylinder")
+        self.assertEqual(data["primitive_type"], "CYLINDER")
+
+    def test_mesh_primitive_add_default_name(self) -> None:
+        """Omitting name gives Blender a default name."""
+        data = self._test_tool("mesh_primitive_add", {
+            "primitive_type": "CUBE",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertIsInstance(data["name"], str)
+        self.assertTrue(len(data["name"]) > 0)
+
+    def test_mesh_primitive_add_name_deduplication(self) -> None:
+        """Second object with the same name gets a .001 suffix."""
+        self._test_tool("mesh_primitive_add", {
+            "primitive_type": "CUBE",
+            "name": "SharedName",
+        })
+        data = self._test_tool("mesh_primitive_add", {
+            "primitive_type": "SPHERE",
+            "name": "SharedName",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertNotEqual(data["name"], "SharedName")
+        self.assertTrue(data["name"].startswith("SharedName"))
+
+    def test_mesh_primitive_add_object_in_scene(self) -> None:
+        """Verify the created object is visible in scene state."""
+        self._test_tool("mesh_primitive_add", {
+            "primitive_type": "CUBE",
+            "name": "SceneCheckCube",
+        })
+        state = self._test_tool("get_scene_state")
+        names = [o["name"] for o in state["objects"]]
+        self.assertIn("SceneCheckCube", names)
+
+    def test_mesh_primitive_add_error_invalid_type(self) -> None:
+        data = self._test_tool("mesh_primitive_add", {
+            "primitive_type": "TORUS",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_PRIMITIVE_TYPE")
+        self.assertIsInstance(data["current_state"]["supported_types"], list)
+        self.assertIsInstance(data["hint"], str)
+
+    # -----------------------------------------------------------------
     # Render tools.
 
     def _assert_valid_png(self, filepath: str) -> None:
