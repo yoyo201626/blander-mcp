@@ -1501,6 +1501,141 @@ class _TestServerMixin:
         self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
 
     # -----------------------------------------------------------------
+    # Modifier tools (REQ-11).
+
+    def test_object_modifier_add_subsurf(self) -> None:
+        data = self._test_tool("object_modifier_add", {
+            "object_name": "Cube",
+            "modifier_type": "SUBSURF",
+            "name": "MySub",
+            "params": {"levels": 2, "render_levels": 3},
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "Cube")
+        self.assertEqual(data["modifier_name"], "MySub")
+        self.assertEqual(data["modifier_type"], "SUBSURF")
+        self.assertIn("levels", data["applied_params"])
+        self.assertIn("render_levels", data["applied_params"])
+
+    def test_object_modifier_add_wave(self) -> None:
+        data = self._test_tool("object_modifier_add", {
+            "object_name": "Cube",
+            "modifier_type": "WAVE",
+            "params": {"height": 0.5, "width": 1.5, "speed": 2.0},
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["modifier_type"], "WAVE")
+        self.assertIn("height", data["applied_params"])
+        self.assertIn("width", data["applied_params"])
+        self.assertIn("speed", data["applied_params"])
+
+    def test_object_modifier_add_default_name(self) -> None:
+        """Omitting name auto-generates one."""
+        data = self._test_tool("object_modifier_add", {
+            "object_name": "Cube",
+            "modifier_type": "SOLIDIFY",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertIsInstance(data["modifier_name"], str)
+        self.assertTrue(len(data["modifier_name"]) > 0)
+
+    def test_object_modifier_add_no_params(self) -> None:
+        """Modifier added without any params has empty applied/failed lists."""
+        data = self._test_tool("object_modifier_add", {
+            "object_name": "Cube",
+            "modifier_type": "BEVEL",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertIsInstance(data["applied_params"], list)
+        self.assertIsInstance(data["failed_params"], list)
+
+    def test_object_modifier_add_error_object_not_found(self) -> None:
+        data = self._test_tool("object_modifier_add", {
+            "object_name": "NoSuchObject",
+            "modifier_type": "SUBSURF",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+
+    def test_object_modifier_add_error_invalid_type(self) -> None:
+        data = self._test_tool("object_modifier_add", {
+            "object_name": "Cube",
+            "modifier_type": "FAKE_MOD",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_MODIFIER_TYPE")
+        self.assertIsInstance(data["hint"], str)
+
+    def test_object_modifiers_list_empty(self) -> None:
+        """Fresh mesh object has no modifiers."""
+        self._test_tool("mesh_primitive_add", {
+            "primitive_type": "PLANE",
+            "name": "CleanPlane",
+        })
+        data = self._test_tool("object_modifiers_list", {
+            "object_name": "CleanPlane",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "CleanPlane")
+        self.assertIsInstance(data["modifiers"], list)
+        self.assertEqual(len(data["modifiers"]), 0)
+
+    def test_object_modifiers_list_after_add(self) -> None:
+        """Modifier added via object_modifier_add is returned by list."""
+        self._test_tool("object_modifier_add", {
+            "object_name": "Cube",
+            "modifier_type": "SUBSURF",
+            "name": "ListCheck",
+            "params": {"levels": 2},
+        })
+        data = self._test_tool("object_modifiers_list", {
+            "object_name": "Cube",
+        })
+        self.assertEqual(data["status"], "ok")
+        names = [m["name"] for m in data["modifiers"]]
+        self.assertIn("ListCheck", names)
+        sub_mod = next(m for m in data["modifiers"] if m["name"] == "ListCheck")
+        self.assertEqual(sub_mod["type"], "SUBSURF")
+        self.assertIsInstance(sub_mod["params"], dict)
+        self.assertEqual(sub_mod["params"].get("levels"), 2)
+
+    def test_object_modifiers_list_params_roundtrip(self) -> None:
+        """Params set via object_modifier_add are read back correctly."""
+        self._test_tool("object_modifier_add", {
+            "object_name": "Cube",
+            "modifier_type": "WAVE",
+            "name": "WaveCheck",
+            "params": {"height": 0.75, "speed": 1.5},
+        })
+        data = self._test_tool("object_modifiers_list", {
+            "object_name": "Cube",
+        })
+        wave = next(
+            (m for m in data["modifiers"] if m["name"] == "WaveCheck"), None,
+        )
+        self.assertIsNotNone(wave)
+        self.assertAlmostEqual(wave["params"].get("height"), 0.75, places=4)
+        self.assertAlmostEqual(wave["params"].get("speed"), 1.5, places=4)
+
+    def test_object_modifiers_list_error_object_not_found(self) -> None:
+        data = self._test_tool("object_modifiers_list", {
+            "object_name": "NoSuchObject",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+
+    def test_object_modifier_visible_in_detail_summary(self) -> None:
+        """Modifier added to Cube appears in get_object_detail_summary."""
+        self._test_tool("object_modifier_add", {
+            "object_name": "Cube",
+            "modifier_type": "SUBSURF",
+            "name": "DetailCheck",
+        })
+        detail = self._test_tool("get_object_detail_summary", {"name": "Cube"})
+        mod_names = [m["name"] for m in detail.get("modifiers", [])]
+        self.assertIn("DetailCheck", mod_names)
+
+    # -----------------------------------------------------------------
     # Camera animation tools (REQ-10).
 
     def test_camera_position_keyframe(self) -> None:
