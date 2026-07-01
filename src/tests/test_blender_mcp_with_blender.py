@@ -1324,6 +1324,183 @@ class _TestServerMixin:
         self.assertIsInstance(data["hint"], str)
 
     # -----------------------------------------------------------------
+    # Transform keyframe tools (REQ-09).
+
+    def _setup_mesh_cube(self, name: str = "KFCube") -> None:
+        """Create a mesh cube for keyframe tests."""
+        self._test_tool("mesh_primitive_add", {
+            "primitive_type": "CUBE",
+            "name": name,
+        })
+
+    def test_object_keyframe_insert_location(self) -> None:
+        self._setup_mesh_cube()
+        data = self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 1,
+            "location": [1.0, 2.0, 3.0],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "KFCube")
+        self.assertEqual(data["frame"], 1)
+        self.assertIn("location", data["inserted"])
+        self.assertEqual(data["interpolation"], "BEZIER")
+
+    def test_object_keyframe_insert_rotation(self) -> None:
+        self._setup_mesh_cube()
+        import math
+        data = self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 10,
+            "rotation": [0.0, 0.0, math.pi / 2],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertIn("rotation_euler", data["inserted"])
+
+    def test_object_keyframe_insert_scale(self) -> None:
+        self._setup_mesh_cube()
+        data = self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 5,
+            "scale": [2.0, 2.0, 2.0],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertIn("scale", data["inserted"])
+
+    def test_object_keyframe_insert_all_channels(self) -> None:
+        """Insert location + rotation + scale in one call."""
+        self._setup_mesh_cube()
+        data = self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 20,
+            "location": [0.0, 0.0, 0.0],
+            "rotation": [0.0, 0.0, 0.0],
+            "scale": [1.0, 1.0, 1.0],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertIn("location", data["inserted"])
+        self.assertIn("rotation_euler", data["inserted"])
+        self.assertIn("scale", data["inserted"])
+
+    def test_object_keyframe_insert_linear_interpolation(self) -> None:
+        self._setup_mesh_cube()
+        data = self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 1,
+            "location": [0.0, 0.0, 0.0],
+            "interpolation": "LINEAR",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["interpolation"], "LINEAR")
+
+    def test_object_keyframe_insert_error_object_not_found(self) -> None:
+        data = self._test_tool("object_keyframe_insert", {
+            "object_name": "NoSuchObject",
+            "frame": 1,
+            "location": [0.0, 0.0, 0.0],
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+        self.assertIsInstance(data["current_state"]["available_objects"], list)
+
+    def test_object_keyframe_insert_error_no_properties(self) -> None:
+        self._setup_mesh_cube()
+        data = self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 1,
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "NO_PROPERTIES")
+
+    def test_object_keyframe_insert_error_invalid_interpolation(self) -> None:
+        self._setup_mesh_cube()
+        data = self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 1,
+            "location": [0.0, 0.0, 0.0],
+            "interpolation": "EASE_IN",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_INTERPOLATION")
+
+    def test_object_fcurve_list_empty(self) -> None:
+        """Object with no animation returns empty curves."""
+        self._setup_mesh_cube()
+        data = self._test_tool("object_fcurve_list", {
+            "object_name": "KFCube",
+            "data_path": "location",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["data_path"], "location")
+        self.assertIsInstance(data["curves"], list)
+        self.assertEqual(len(data["curves"]), 0)
+
+    def test_object_fcurve_list_after_insert(self) -> None:
+        """F-Curve data matches what was inserted."""
+        self._setup_mesh_cube()
+        self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 1,
+            "location": [0.0, 0.0, 0.0],
+            "interpolation": "LINEAR",
+        })
+        self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 30,
+            "location": [3.0, 0.0, 0.0],
+            "interpolation": "LINEAR",
+        })
+        data = self._test_tool("object_fcurve_list", {
+            "object_name": "KFCube",
+            "data_path": "location",
+        })
+        self.assertEqual(data["status"], "ok")
+        # Should have 3 curves (X, Y, Z).
+        self.assertEqual(len(data["curves"]), 3)
+        # Find X axis (array_index 0).
+        x_curve = next(c for c in data["curves"] if c["array_index"] == 0)
+        kfs = x_curve["keyframes"]
+        self.assertEqual(len(kfs), 2)
+        self.assertEqual(kfs[0]["frame"], 1)
+        self.assertAlmostEqual(kfs[0]["value"], 0.0, places=4)
+        self.assertEqual(kfs[0]["interpolation"], "LINEAR")
+        self.assertEqual(kfs[1]["frame"], 30)
+        self.assertAlmostEqual(kfs[1]["value"], 3.0, places=4)
+
+    def test_object_fcurve_list_rotation(self) -> None:
+        """rotation_euler data_path is accepted."""
+        self._setup_mesh_cube()
+        self._test_tool("object_keyframe_insert", {
+            "object_name": "KFCube",
+            "frame": 1,
+            "rotation": [0.0, 0.0, 0.0],
+        })
+        data = self._test_tool("object_fcurve_list", {
+            "object_name": "KFCube",
+            "data_path": "rotation_euler",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(len(data["curves"]), 3)
+
+    def test_object_fcurve_list_error_invalid_data_path(self) -> None:
+        self._setup_mesh_cube()
+        data = self._test_tool("object_fcurve_list", {
+            "object_name": "KFCube",
+            "data_path": "color",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_DATA_PATH")
+        self.assertIsInstance(data["current_state"]["supported_data_paths"], list)
+
+    def test_object_fcurve_list_error_object_not_found(self) -> None:
+        data = self._test_tool("object_fcurve_list", {
+            "object_name": "NoSuchObject",
+            "data_path": "location",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+
+    # -----------------------------------------------------------------
     # Render tools.
 
     def _assert_valid_png(self, filepath: str) -> None:
