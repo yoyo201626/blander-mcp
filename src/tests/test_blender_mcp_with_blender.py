@@ -1636,6 +1636,144 @@ class _TestServerMixin:
         self.assertIn("DetailCheck", mod_names)
 
     # -----------------------------------------------------------------
+    # Driver tools (REQ-12).
+
+    def test_object_driver_add_location_z(self) -> None:
+        """Add sin(frame/10) driver to location Z — canonical REQ-12 case."""
+        data = self._test_tool("object_driver_add", {
+            "object_name": "Cube",
+            "data_path": "location",
+            "index": 2,
+            "expression": "sin(frame/10)",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "Cube")
+        self.assertEqual(data["data_path"], "location")
+        self.assertEqual(data["index"], 2)
+        self.assertEqual(data["expression"], "sin(frame/10)")
+        self.assertEqual(data["action"], "added")
+
+    def test_object_driver_add_update_existing(self) -> None:
+        """Calling driver_add twice on the same channel updates the expression."""
+        self._test_tool("object_driver_add", {
+            "object_name": "Cube",
+            "data_path": "location",
+            "index": 0,
+            "expression": "frame * 0.01",
+        })
+        data = self._test_tool("object_driver_add", {
+            "object_name": "Cube",
+            "data_path": "location",
+            "index": 0,
+            "expression": "frame * 0.02",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["action"], "updated")
+        self.assertEqual(data["expression"], "frame * 0.02")
+
+    def test_object_driver_add_rotation(self) -> None:
+        data = self._test_tool("object_driver_add", {
+            "object_name": "Cube",
+            "data_path": "rotation_euler",
+            "index": 2,
+            "expression": "frame * 0.1",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["data_path"], "rotation_euler")
+
+    def test_object_driver_add_scale(self) -> None:
+        data = self._test_tool("object_driver_add", {
+            "object_name": "Cube",
+            "data_path": "scale",
+            "index": 1,
+            "expression": "1 + sin(frame / 20) * 0.5",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["data_path"], "scale")
+
+    def test_object_driver_add_error_object_not_found(self) -> None:
+        data = self._test_tool("object_driver_add", {
+            "object_name": "NoSuchObject",
+            "data_path": "location",
+            "index": 0,
+            "expression": "frame",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+        self.assertIsInstance(data["current_state"]["available_objects"], list)
+
+    def test_object_driver_add_error_empty_expression(self) -> None:
+        data = self._test_tool("object_driver_add", {
+            "object_name": "Cube",
+            "data_path": "location",
+            "index": 0,
+            "expression": "   ",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "EMPTY_EXPRESSION")
+
+    def test_object_driver_list_empty(self) -> None:
+        """Fresh mesh object has no drivers."""
+        self._test_tool("mesh_primitive_add", {
+            "primitive_type": "CUBE",
+            "name": "NoDrvCube",
+        })
+        data = self._test_tool("object_driver_list", {
+            "object_name": "NoDrvCube",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertIsInstance(data["drivers"], list)
+        self.assertEqual(len(data["drivers"]), 0)
+
+    def test_object_driver_list_after_add(self) -> None:
+        """Driver written by object_driver_add is returned by object_driver_list."""
+        self._test_tool("object_driver_add", {
+            "object_name": "Cube",
+            "data_path": "location",
+            "index": 2,
+            "expression": "sin(frame/10)",
+        })
+        data = self._test_tool("object_driver_list", {
+            "object_name": "Cube",
+        })
+        self.assertEqual(data["status"], "ok")
+        drivers = data["drivers"]
+        self.assertTrue(len(drivers) >= 1)
+        z_drv = next(
+            (d for d in drivers
+             if d["data_path"] == "location" and d["index"] == 2),
+            None,
+        )
+        self.assertIsNotNone(z_drv)
+        self.assertEqual(z_drv["expression"], "sin(frame/10)")
+        self.assertEqual(z_drv["driver_type"], "SCRIPTED")
+
+    def test_object_driver_list_multiple(self) -> None:
+        """Multiple drivers on different channels are all returned."""
+        for idx, expr in enumerate(["frame*0.1", "sin(frame)", "cos(frame)"]):
+            self._test_tool("object_driver_add", {
+                "object_name": "Cube",
+                "data_path": "location",
+                "index": idx,
+                "expression": expr,
+            })
+        data = self._test_tool("object_driver_list", {
+            "object_name": "Cube",
+        })
+        self.assertEqual(data["status"], "ok")
+        loc_drivers = [
+            d for d in data["drivers"] if d["data_path"] == "location"
+        ]
+        self.assertEqual(len(loc_drivers), 3)
+
+    def test_object_driver_list_error_object_not_found(self) -> None:
+        data = self._test_tool("object_driver_list", {
+            "object_name": "NoSuchObject",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+
+    # -----------------------------------------------------------------
     # Camera animation tools (REQ-10).
 
     def test_camera_position_keyframe(self) -> None:
