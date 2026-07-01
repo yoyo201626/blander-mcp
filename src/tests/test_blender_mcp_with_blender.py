@@ -3030,6 +3030,204 @@ class _TestServerMixin:
                            "Expected Z location fcurve on IKTarget")
         self.assertEqual(len(z_curves[0]["keyframes"]), 2)
 
+    # -----------------------------------------------------------------
+    # NFR-01: Tool reliability — 10 consecutive calls.
+
+    _N_REPEAT = 10  # number of repeated calls required by NFR-01
+
+    def _setup_gp_for_nfr(self, obj_name: str, layer_name: str = "Layer") -> None:
+        """Create a fresh GP object + layer for reliability tests."""
+        self._test_tool("gp_object_create", {"name": obj_name})
+        self._test_tool("gp_layer_create", {
+            "object_name": obj_name,
+            "layer_name": layer_name,
+        })
+
+    def test_nfr01_gp_stroke_draw_replace_no_silent_fail(self) -> None:
+        """
+        gp_stroke_draw REPLACE × 10: every call returns status='ok'.
+        No silent failures over repeated invocations.
+        """
+        self._setup_gp_for_nfr("NFR01_GP_R")
+        points = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+        for i in range(self._N_REPEAT):
+            r = self._test_tool("gp_stroke_draw", {
+                "object_name": "NFR01_GP_R",
+                "layer_name": "Layer",
+                "frame": 1,
+                "points": points,
+                "mode": "replace",
+            })
+            self.assertEqual(
+                r["status"], "ok",
+                f"gp_stroke_draw REPLACE call {i + 1}/{self._N_REPEAT} failed",
+            )
+
+    def test_nfr01_gp_stroke_draw_replace_no_residue(self) -> None:
+        """
+        gp_stroke_draw REPLACE × 10: final stroke_count == 1 (no accumulation).
+        Each call reports the same stroke_count=1 as a single call would.
+        """
+        self._setup_gp_for_nfr("NFR01_GP_R2")
+        points = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+        results = []
+        for _ in range(self._N_REPEAT):
+            r = self._test_tool("gp_stroke_draw", {
+                "object_name": "NFR01_GP_R2",
+                "layer_name": "Layer",
+                "frame": 1,
+                "points": points,
+                "mode": "replace",
+            })
+            results.append(r["stroke_count"])
+
+        # REPLACE recreates the frame each time → exactly 1 stroke always.
+        self.assertTrue(
+            all(c == 1 for c in results),
+            "Expected stroke_count=1 on every REPLACE call; "
+            f"got {results}",
+        )
+
+    def test_nfr01_gp_stroke_draw_append_accumulates_correctly(self) -> None:
+        """
+        gp_stroke_draw APPEND × 10: no silent failures, stroke_count
+        increases by exactly 1 per call (1 → 10).
+        """
+        self._setup_gp_for_nfr("NFR01_GP_A")
+        points = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+        for i in range(self._N_REPEAT):
+            r = self._test_tool("gp_stroke_draw", {
+                "object_name": "NFR01_GP_A",
+                "layer_name": "Layer",
+                "frame": 1,
+                "points": points,
+                "mode": "append",
+            })
+            self.assertEqual(
+                r["status"], "ok",
+                f"gp_stroke_draw APPEND call {i + 1} failed",
+            )
+            self.assertEqual(
+                r["stroke_count"], i + 1,
+                f"Expected stroke_count={i + 1} at call {i + 1}; "
+                f"got {r['stroke_count']}",
+            )
+
+    def test_nfr01_gp_shape_draw_replace_consistent(self) -> None:
+        """
+        gp_shape_draw circle REPLACE × 10: every call returns status='ok'
+        with the same point_count (no state drift).
+        """
+        self._setup_gp_for_nfr("NFR01_GP_S")
+        params = {
+            "object_name": "NFR01_GP_S",
+            "layer_name": "Layer",
+            "frame": 1,
+            "shape": "circle",
+            "cx": 0.0,
+            "cy": 0.0,
+            "cz": 0.0,
+            "radius": 1.0,
+            "segments": 16,
+            "mode": "replace",
+        }
+        counts: list[int] = []
+        for i in range(self._N_REPEAT):
+            r = self._test_tool("gp_shape_draw", params)
+            self.assertEqual(
+                r["status"], "ok",
+                f"gp_shape_draw call {i + 1} failed",
+            )
+            counts.append(r["point_count"])
+
+        # All calls report the same point_count — no state drift.
+        self.assertEqual(
+            len(set(counts)), 1,
+            f"point_count varied across calls: {counts}",
+        )
+
+    def test_nfr01_object_keyframe_insert_no_silent_fail(self) -> None:
+        """
+        object_keyframe_insert × 10 at same frame: every call returns
+        status='ok' with 'location' in inserted.
+        """
+        for i in range(self._N_REPEAT):
+            r = self._test_tool("object_keyframe_insert", {
+                "object_name": "Cube",
+                "frame": 3,
+                "location": [0.0, 0.0, 0.0],
+                "interpolation": "LINEAR",
+            })
+            self.assertEqual(
+                r["status"], "ok",
+                f"object_keyframe_insert call {i + 1} failed",
+            )
+            self.assertIn(
+                "location", r["inserted"],
+                f"'location' missing from inserted at call {i + 1}",
+            )
+
+    def test_nfr01_object_keyframe_insert_no_duplicate(self) -> None:
+        """
+        object_keyframe_insert × 10 at the same frame: Blender overwrites
+        rather than duplicates — exactly 1 keyframe at that frame afterward.
+        """
+        frame_n = 8
+        for _ in range(self._N_REPEAT):
+            self._test_tool("object_keyframe_insert", {
+                "object_name": "Cube",
+                "frame": frame_n,
+                "location": [0.0, 0.0, 0.0],
+                "interpolation": "BEZIER",
+            })
+
+        fcurves = self._test_tool("object_fcurve_list", {
+            "object_name": "Cube",
+            "data_path": "location",
+        })
+        self.assertEqual(fcurves["status"], "ok")
+        x_curves = [c for c in fcurves["curves"] if c["array_index"] == 0]
+        self.assertGreater(len(x_curves), 0)
+        at_frame = [
+            kf for kf in x_curves[0]["keyframes"]
+            if abs(kf["frame"] - frame_n) < 0.5
+        ]
+        self.assertEqual(
+            len(at_frame), 1,
+            f"Expected 1 keyframe at frame {frame_n} after 10 identical "
+            f"inserts; found {len(at_frame)}",
+        )
+
+    def test_nfr01_object_keyframe_insert_multi_frame_consistent(self) -> None:
+        """
+        object_keyframe_insert × 10 at different frames: all succeed and
+        the fcurve accumulates exactly 10 keyframes (no silent skips).
+        """
+        for i in range(self._N_REPEAT):
+            frame_n = i + 1
+            r = self._test_tool("object_keyframe_insert", {
+                "object_name": "Cube",
+                "frame": frame_n,
+                "location": [float(i) * 0.1, 0.0, 0.0],
+                "interpolation": "LINEAR",
+            })
+            self.assertEqual(
+                r["status"], "ok",
+                f"object_keyframe_insert at frame {frame_n} failed",
+            )
+
+        fcurves = self._test_tool("object_fcurve_list", {
+            "object_name": "Cube",
+            "data_path": "location",
+        })
+        x_curves = [c for c in fcurves["curves"] if c["array_index"] == 0]
+        self.assertGreater(len(x_curves), 0)
+        self.assertEqual(
+            len(x_curves[0]["keyframes"]), self._N_REPEAT,
+            f"Expected {self._N_REPEAT} keyframes; "
+            f"found {len(x_curves[0]['keyframes'])}",
+        )
+
 
 # -----------------------------------------------------------------------------
 # Concrete test classes.

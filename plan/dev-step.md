@@ -229,8 +229,11 @@ AI 无需人工介入即可根据 `hint` 重试。
 
 ### NFR-01：工具可靠性
 
-每个高频工具（GP 笔触绘制、关键帧插入）连续调用 10 次，
-结果与单次调用一致，不出现静默失败或状态残留。
+- [x] `gp_stroke_draw` REPLACE × 10：每次返回 `stroke_count=1`，无残留
+- [x] `gp_stroke_draw` APPEND × 10：笔触数正确累加 1→10，无静默失败
+- [x] `gp_shape_draw` circle REPLACE × 10：`point_count` 每次一致，无漂移
+- [x] `object_keyframe_insert` 同帧 × 10：无重复关键帧，无静默失败
+- [x] `object_keyframe_insert` 不同帧 × 10：F-Curve 累积恰好 10 个关键帧
 
 ### NFR-02：错误自愈
 
