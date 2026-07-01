@@ -2267,6 +2267,188 @@ class _TestServerMixin:
         })
         self.assertTrue(data["found"])
 
+    # -----------------------------------------------------------------
+    # Geometry Nodes tools (REQ-13).
+
+    def test_geonodes_apply_preset_wave(self) -> None:
+        """Apply wave preset; modifier and node tree are created."""
+        data = self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "wave",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "Cube")
+        self.assertEqual(data["preset"], "wave")
+        self.assertIn("modifier_name", data)
+        self.assertIn("node_tree_name", data)
+        self.assertGreater(len(data["nodes_created"]), 0)
+
+    def test_geonodes_apply_preset_noise_displace(self) -> None:
+        """Apply noise_displace preset; modifier and nodes are created."""
+        data = self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "noise_displace",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["preset"], "noise_displace")
+        self.assertGreater(len(data["nodes_created"]), 0)
+
+    def test_geonodes_apply_preset_error_invalid(self) -> None:
+        """Unknown preset returns INVALID_PRESET error."""
+        data = self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "nonexistent",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_PRESET")
+
+    def test_geonodes_apply_preset_error_object_not_found(self) -> None:
+        """Object not found returns OBJECT_NOT_FOUND error."""
+        data = self._test_tool("geonodes_apply_preset", {
+            "object_name": "GhostObject",
+            "preset": "wave",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+
+    def test_geonodes_query_after_preset(self) -> None:
+        """Query returns node list matching the applied wave preset."""
+        self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "wave",
+        })
+        data = self._test_tool("geonodes_query", {
+            "object_name": "Cube",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertGreater(len(data["nodes"]), 0)
+        node_names = [n["name"] for n in data["nodes"]]
+        # The preset creates Group Input / Output plus math/position nodes.
+        self.assertTrue(
+            any("Group Input" in name or "NodeGroupInput" in name
+                for name in [n.get("bl_idname", "") for n in data["nodes"]]),
+            "Expected NodeGroupInput in nodes",
+        )
+
+    def test_geonodes_query_error_no_modifier(self) -> None:
+        """Query on object with no GN modifier returns NO_GEONODES_MODIFIER."""
+        # Light has no GN modifier by default.
+        data = self._test_tool("geonodes_query", {
+            "object_name": "Light",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "NO_GEONODES_MODIFIER")
+
+    def test_geonodes_node_set_basic(self) -> None:
+        """Set a node input value; new_value matches what was set."""
+        self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "wave",
+        })
+        # "Multiply Amplitude" node has a second scalar input (Value slot 1).
+        data = self._test_tool("geonodes_node_set", {
+            "object_name": "Cube",
+            "node_name": "Multiply Amplitude",
+            "input_name": "Value",
+            "value": 0.75,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertAlmostEqual(data["new_value"], 0.75, places=4)
+
+    def test_geonodes_node_set_readback_matches(self) -> None:
+        """After set, query confirms the updated default_value."""
+        self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "wave",
+        })
+        self._test_tool("geonodes_node_set", {
+            "object_name": "Cube",
+            "node_name": "Multiply Amplitude",
+            "input_name": "Value",
+            "value": 1.23,
+        })
+        query = self._test_tool("geonodes_query", {"object_name": "Cube"})
+        nodes = {n["name"]: n for n in query["nodes"]}
+        amp_node = nodes.get("Multiply Amplitude")
+        self.assertIsNotNone(amp_node)
+        # The first "Value" input (index 0) was set to 1.23.
+        # default_value is returned for all inputs regardless of link status.
+        value_inputs = [i for i in amp_node["inputs"] if i["name"] == "Value"]
+        self.assertTrue(
+            any(abs((i.get("default_value") or 0) - 1.23) < 0.01
+                for i in value_inputs),
+            "Expected default_value ~1.23 after geonodes_node_set",
+        )
+
+    def test_geonodes_node_set_error_node_not_found(self) -> None:
+        """Setting a non-existent node returns NODE_NOT_FOUND."""
+        self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "wave",
+        })
+        data = self._test_tool("geonodes_node_set", {
+            "object_name": "Cube",
+            "node_name": "GhostNode",
+            "input_name": "Value",
+            "value": 1.0,
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "NODE_NOT_FOUND")
+
+    def test_geonodes_node_keyframe_basic(self) -> None:
+        """Keyframe a node input; result frame and value match request."""
+        self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "wave",
+        })
+        data = self._test_tool("geonodes_node_keyframe", {
+            "object_name": "Cube",
+            "node_name": "Multiply Amplitude",
+            "input_name": "Value",
+            "frame": 1,
+            "value": 0.1,
+            "interpolation": "LINEAR",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["frame"], 1)
+        self.assertAlmostEqual(data["value"], 0.1, places=4)
+        self.assertEqual(data["interpolation"], "LINEAR")
+
+    def test_geonodes_node_keyframe_two_frames(self) -> None:
+        """Two keyframes at different frames are both accepted."""
+        self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "wave",
+        })
+        for frame, val in ((1, 0.1), (50, 0.9)):
+            data = self._test_tool("geonodes_node_keyframe", {
+                "object_name": "Cube",
+                "node_name": "Multiply Amplitude",
+                "input_name": "Value",
+                "frame": frame,
+                "value": val,
+                "interpolation": "BEZIER",
+            })
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["frame"], frame)
+
+    def test_geonodes_node_keyframe_error_invalid_interpolation(self) -> None:
+        """Invalid interpolation returns INVALID_INTERPOLATION error."""
+        self._test_tool("geonodes_apply_preset", {
+            "object_name": "Cube",
+            "preset": "wave",
+        })
+        data = self._test_tool("geonodes_node_keyframe", {
+            "object_name": "Cube",
+            "node_name": "Multiply Amplitude",
+            "input_name": "Value",
+            "frame": 10,
+            "value": 0.5,
+            "interpolation": "BOUNCE",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_INTERPOLATION")
+
 
 # -----------------------------------------------------------------------------
 # Concrete test classes.
