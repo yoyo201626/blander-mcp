@@ -202,8 +202,8 @@ AI 无需人工介入即可根据 `hint` 重试。
 
 ### REQ-16：资产导入
 
-- [ ] 从外部文件导入对象：FBX、GLTF/GLB、OBJ
-- [ ] 从另一个 `.blend` 文件通过 Library Link 引入资产（对象、集合）
+- [x] 从外部文件导入对象：FBX、GLTF/GLB、OBJ
+- [x] 从另一个 `.blend` 文件通过 Library Link 引入资产（对象、集合）
 
 **验收**：
 - 导入后对象出现在场景中，名称与源文件一致

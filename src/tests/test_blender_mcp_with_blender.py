@@ -2663,6 +2663,178 @@ class _TestServerMixin:
         self.assertEqual(data["status"], "error")
         self.assertEqual(data["error_code"], "SLOT_INDEX_OUT_OF_RANGE")
 
+    # -----------------------------------------------------------------
+    # Asset import tools (REQ-16).
+
+    # -- asset_import error cases (no external files needed) ----------
+
+    def test_asset_import_error_file_not_found(self) -> None:
+        data = self._test_tool("asset_import", {
+            "filepath": "/no/such/file.obj",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "FILE_NOT_FOUND")
+
+    def test_asset_import_error_unsupported_format(self) -> None:
+        """Unknown extension with no format override returns error."""
+        # Create an empty temp file with an unknown extension.
+        tmp_path = self._test_tool("execute_blender_code", {
+            "code": (
+                "import tempfile, os\n"
+                "fd, path = tempfile.mkstemp(suffix='.xyz')\n"
+                "os.close(fd)\n"
+                "result = {'path': path}\n"
+            ),
+        })["path"]
+        data = self._test_tool("asset_import", {"filepath": tmp_path})
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "UNSUPPORTED_FORMAT")
+
+    # -- OBJ round-trip -----------------------------------------------
+
+    def test_asset_import_obj_roundtrip(self) -> None:
+        """Export Cube to OBJ then import; new objects appear in scene."""
+        # Export the default Cube to a temp OBJ file inside Blender.
+        export_res = self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy, tempfile, os\n"
+                "tmpdir = tempfile.mkdtemp()\n"
+                "obj_path = os.path.join(tmpdir, 'cube_export.obj')\n"
+                "bpy.ops.wm.obj_export(\n"
+                "    filepath=obj_path,\n"
+                "    export_selected_objects=False,\n"
+                ")\n"
+                "result = {'path': obj_path, 'exists': os.path.isfile(obj_path)}\n"
+            ),
+        })
+        self.assertTrue(export_res.get("exists"), "OBJ export failed")
+        obj_path = export_res["path"]
+
+        data = self._test_tool("asset_import", {
+            "filepath": obj_path,
+            "format": "OBJ",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["format"], "OBJ")
+        # At least one object should have been imported.
+        self.assertGreater(len(data["imported_objects"]), 0)
+
+    # -- GLTF round-trip -----------------------------------------------
+
+    def test_asset_import_gltf_roundtrip(self) -> None:
+        """Export Cube to GLB then import; new objects appear in scene."""
+        export_res = self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy, tempfile, os\n"
+                "tmpdir = tempfile.mkdtemp()\n"
+                "glb_path = os.path.join(tmpdir, 'cube_export.glb')\n"
+                "bpy.ops.export_scene.gltf(\n"
+                "    filepath=glb_path,\n"
+                "    export_format='GLB',\n"
+                ")\n"
+                "result = {'path': glb_path, 'exists': os.path.isfile(glb_path)}\n"
+            ),
+        })
+        self.assertTrue(export_res.get("exists"), "GLB export failed")
+        glb_path = export_res["path"]
+
+        data = self._test_tool("asset_import", {
+            "filepath": glb_path,
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["format"], "GLTF")
+        self.assertGreater(len(data["imported_objects"]), 0)
+
+    # -- blend_library_link error cases --------------------------------
+
+    def test_blend_library_link_error_file_not_found(self) -> None:
+        data = self._test_tool("blend_library_link", {
+            "filepath": "/no/such/file.blend",
+            "asset_type": "OBJECT",
+            "asset_name": "Cube",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "FILE_NOT_FOUND")
+
+    def test_blend_library_link_error_invalid_asset_type(self) -> None:
+        # Save a temp blend file first so filepath error doesn't fire.
+        res = self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy, tempfile, os\n"
+                "tmpdir = tempfile.mkdtemp()\n"
+                "blend_path = os.path.join(tmpdir, 'dummy.blend')\n"
+                "bpy.ops.wm.save_as_mainfile(filepath=blend_path, copy=True)\n"
+                "result = {'path': blend_path}\n"
+            ),
+        })
+        data = self._test_tool("blend_library_link", {
+            "filepath": res["path"],
+            "asset_type": "MESH",
+            "asset_name": "Cube",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_ASSET_TYPE")
+
+    def test_blend_library_link_error_asset_not_found(self) -> None:
+        """ASSET_NOT_FOUND response includes available_assets list."""
+        res = self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy, tempfile, os\n"
+                "tmpdir = tempfile.mkdtemp()\n"
+                "blend_path = os.path.join(tmpdir, 'scene_copy.blend')\n"
+                "bpy.ops.wm.save_as_mainfile(filepath=blend_path, copy=True)\n"
+                "result = {'path': blend_path}\n"
+            ),
+        })
+        data = self._test_tool("blend_library_link", {
+            "filepath": res["path"],
+            "asset_type": "OBJECT",
+            "asset_name": "NonExistentObject",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "ASSET_NOT_FOUND")
+        self.assertIn("available_assets", data["current_state"])
+        self.assertIsInstance(data["current_state"]["available_assets"], list)
+
+    # -- blend_library_link success ------------------------------------
+
+    def test_blend_library_link_object(self) -> None:
+        """Linking an object from a .blend file adds a library-linked object."""
+        # Save a copy of the current scene (which contains 'Cube').
+        res = self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy, tempfile, os\n"
+                "tmpdir = tempfile.mkdtemp()\n"
+                "blend_path = os.path.join(tmpdir, 'link_src.blend')\n"
+                "bpy.ops.wm.save_as_mainfile(filepath=blend_path, copy=True)\n"
+                "result = {'path': blend_path}\n"
+            ),
+        })
+        blend_path = res["path"]
+
+        data = self._test_tool("blend_library_link", {
+            "filepath": blend_path,
+            "asset_type": "OBJECT",
+            "asset_name": "Cube",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertGreater(len(data["linked_objects"]), 0,
+                           "Expected at least one linked object")
+
+        # Verify the linked object has a library attribute set.
+        verify = self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "linked = [\n"
+                "    obj.name for obj in bpy.data.objects\n"
+                "    if obj.library is not None\n"
+                "]\n"
+                "result = {'linked': linked}\n"
+            ),
+        })
+        self.assertGreater(len(verify["linked"]), 0,
+                           "Expected linked objects with obj.library set")
+
 
 # -----------------------------------------------------------------------------
 # Concrete test classes.
