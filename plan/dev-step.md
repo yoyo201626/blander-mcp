@@ -213,8 +213,8 @@ AI 无需人工介入即可根据 `hint` 重试。
 
 ### REQ-17：Armature 动画
 
-- [ ] 将预制 Action 应用到指定 Armature 对象
-- [ ] 对 IK 目标（Empty 对象）在指定帧插入位置关键帧
+- [x] 将预制 Action 应用到指定 Armature 对象
+- [x] 对 IK 目标（Empty 对象）在指定帧插入位置关键帧
 
 **验收**：
 - 应用 Action 后播放，骨骼按 Action 运动

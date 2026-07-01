@@ -2835,6 +2835,201 @@ class _TestServerMixin:
         self.assertGreater(len(verify["linked"]), 0,
                            "Expected linked objects with obj.library set")
 
+    # -----------------------------------------------------------------
+    # Armature animation tools (REQ-17).
+
+    # Shared helper: create a minimal armature + action in Blender.
+    _SETUP_ARMATURE_CODE = (
+        "import bpy\n"
+        # Remove any existing test armature to start clean.
+        "existing = bpy.data.objects.get('TestArm')\n"
+        "if existing:\n"
+        "    bpy.data.objects.remove(existing, do_unlink=True)\n"
+        # Create armature data and object.
+        "arm_data = bpy.data.armatures.new('TestArmData')\n"
+        "arm_obj  = bpy.data.objects.new('TestArm', arm_data)\n"
+        "bpy.context.scene.collection.objects.link(arm_obj)\n"
+        # Enter edit mode to add a bone.
+        "bpy.context.view_layer.objects.active = arm_obj\n"
+        "arm_obj.select_set(True)\n"
+        "bpy.ops.object.mode_set(mode='EDIT')\n"
+        "bone = arm_data.edit_bones.new('Bone')\n"
+        "bone.head = (0, 0, 0)\n"
+        "bone.tail = (0, 0, 1)\n"
+        "bpy.ops.object.mode_set(mode='OBJECT')\n"
+        # Create a simple action with two keyframes.
+        "old_act = bpy.data.actions.get('TestAction')\n"
+        "if old_act:\n"
+        "    bpy.data.actions.remove(old_act)\n"
+        "act = bpy.data.actions.new('TestAction')\n"
+        # Use keyframe_insert through pose mode to create proper bone curves.
+        "bpy.context.view_layer.objects.active = arm_obj\n"
+        "bpy.ops.object.mode_set(mode='POSE')\n"
+        "pose_bone = arm_obj.pose.bones['Bone']\n"
+        "bpy.context.scene.frame_set(1)\n"
+        "pose_bone.location = (0, 0, 0)\n"
+        "pose_bone.keyframe_insert(data_path='location', frame=1)\n"
+        "bpy.context.scene.frame_set(24)\n"
+        "pose_bone.location = (0, 0, 0.5)\n"
+        "pose_bone.keyframe_insert(data_path='location', frame=24)\n"
+        "bpy.ops.object.mode_set(mode='OBJECT')\n"
+        # Rename the auto-created action to 'TestAction'.
+        "if arm_obj.animation_data and arm_obj.animation_data.action:\n"
+        "    arm_obj.animation_data.action.name = 'TestAction'\n"
+        "result = {\n"
+        "    'armature': arm_obj.name,\n"
+        "    'action': bpy.data.actions.get('TestAction') and 'TestAction',\n"
+        "}\n"
+    )
+
+    def test_action_list_includes_created_action(self) -> None:
+        """After creating an action it appears in action_list."""
+        self._test_tool("execute_blender_code", {"code": self._SETUP_ARMATURE_CODE})
+        data = self._test_tool("action_list", {})
+        self.assertEqual(data["status"], "ok")
+        names = [a["name"] for a in data["actions"]]
+        self.assertIn("TestAction", names)
+
+    def test_action_list_properties_present(self) -> None:
+        """Each action entry has required keys."""
+        self._test_tool("execute_blender_code", {"code": self._SETUP_ARMATURE_CODE})
+        data = self._test_tool("action_list", {})
+        self.assertGreater(len(data["actions"]), 0)
+        for act in data["actions"]:
+            self.assertIn("name", act)
+            self.assertIn("frame_start", act)
+            self.assertIn("frame_end", act)
+            self.assertIn("fcurve_count", act)
+            self.assertIn("slots", act)
+
+    def test_action_list_sorted_alphabetically(self) -> None:
+        """action_list results are in alphabetical order."""
+        data = self._test_tool("action_list", {})
+        names = [a["name"] for a in data["actions"]]
+        self.assertEqual(names, sorted(names))
+
+    def test_armature_action_apply_basic(self) -> None:
+        """Apply TestAction to TestArm; action is set and frame range returned."""
+        self._test_tool("execute_blender_code", {"code": self._SETUP_ARMATURE_CODE})
+        # Detach action so we can re-apply it via the tool.
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "obj = bpy.data.objects.get('TestArm')\n"
+                "if obj and obj.animation_data:\n"
+                "    obj.animation_data.action = None\n"
+                "result = {}\n"
+            ),
+        })
+        data = self._test_tool("armature_action_apply", {
+            "armature_name": "TestArm",
+            "action_name": "TestAction",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["armature_name"], "TestArm")
+        self.assertEqual(data["action_name"], "TestAction")
+        self.assertIn("frame_start", data)
+        self.assertIn("frame_end", data)
+        self.assertGreaterEqual(data["frame_end"], data["frame_start"])
+
+    def test_armature_action_apply_verified_in_blender(self) -> None:
+        """After apply, Blender confirms animation_data.action is set."""
+        self._test_tool("execute_blender_code", {"code": self._SETUP_ARMATURE_CODE})
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "obj = bpy.data.objects.get('TestArm')\n"
+                "if obj and obj.animation_data:\n"
+                "    obj.animation_data.action = None\n"
+                "result = {}\n"
+            ),
+        })
+        self._test_tool("armature_action_apply", {
+            "armature_name": "TestArm",
+            "action_name": "TestAction",
+        })
+        verify = self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "obj = bpy.data.objects.get('TestArm')\n"
+                "act_name = None\n"
+                "if obj and obj.animation_data and obj.animation_data.action:\n"
+                "    act_name = obj.animation_data.action.name\n"
+                "result = {'action_name': act_name}\n"
+            ),
+        })
+        self.assertEqual(verify["action_name"], "TestAction")
+
+    def test_armature_action_apply_error_not_armature(self) -> None:
+        """Passing a non-armature object returns NOT_AN_ARMATURE error."""
+        data = self._test_tool("armature_action_apply", {
+            "armature_name": "Cube",
+            "action_name": "TestAction",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "NOT_AN_ARMATURE")
+        self.assertIn("armature_objects", data["current_state"])
+
+    def test_armature_action_apply_error_object_not_found(self) -> None:
+        data = self._test_tool("armature_action_apply", {
+            "armature_name": "GhostArm",
+            "action_name": "TestAction",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+
+    def test_armature_action_apply_error_action_not_found(self) -> None:
+        self._test_tool("execute_blender_code", {"code": self._SETUP_ARMATURE_CODE})
+        data = self._test_tool("armature_action_apply", {
+            "armature_name": "TestArm",
+            "action_name": "NoSuchAction",
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "ACTION_NOT_FOUND")
+        self.assertIn("available_actions", data["current_state"])
+
+    def test_armature_ik_target_keyframe_via_object_keyframe_insert(
+        self,
+    ) -> None:
+        """
+        IK target (Empty) location keyframe is inserted using the existing
+        object_keyframe_insert tool — no dedicated REQ-17 tool needed.
+        """
+        # Create an Empty to act as the IK target.
+        self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "existing = bpy.data.objects.get('IKTarget')\n"
+                "if existing:\n"
+                "    bpy.data.objects.remove(existing, do_unlink=True)\n"
+                "empty = bpy.data.objects.new('IKTarget', None)\n"
+                "empty.empty_display_type = 'SPHERE'\n"
+                "bpy.context.scene.collection.objects.link(empty)\n"
+                "result = {'name': empty.name}\n"
+            ),
+        })
+        # Keyframe the Empty's location at frame 1 and frame 24.
+        for frame, loc in ((1, [0.0, 0.0, 0.0]), (24, [0.0, 0.0, 1.5])):
+            kf = self._test_tool("object_keyframe_insert", {
+                "object_name": "IKTarget",
+                "frame": frame,
+                "location": loc,
+                "interpolation": "LINEAR",
+            })
+            self.assertEqual(kf["status"], "ok")
+            self.assertIn("location", kf["inserted"])
+
+        # Verify via fcurve_list that keyframes exist on the Z channel.
+        fcurves = self._test_tool("object_fcurve_list", {
+            "object_name": "IKTarget",
+            "data_path": "location",
+        })
+        self.assertEqual(fcurves["status"], "ok")
+        z_curves = [c for c in fcurves["curves"] if c["array_index"] == 2]
+        self.assertGreater(len(z_curves), 0,
+                           "Expected Z location fcurve on IKTarget")
+        self.assertEqual(len(z_curves[0]["keyframes"]), 2)
+
 
 # -----------------------------------------------------------------------------
 # Concrete test classes.
