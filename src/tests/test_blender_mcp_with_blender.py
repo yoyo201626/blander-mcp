@@ -3829,9 +3829,16 @@ class TestNFR03Unit(unittest.TestCase):
 class TestBackgroundServer(_TestServerMixin, unittest.TestCase):
     """
     Run all tests against Blender in ``--background`` mode.
+
+    In Blender 5.1, ``--background --command`` mode runs with
+    ``bpy.app.background == False`` and fires ``bpy.app.timers``, so it
+    behaves identically to interactive (timer-based) mode.
     """
 
     _background = True
+    # Blender 5.1 --command mode sets bpy.app.background=False and
+    # fires timers, so screenshots/navigation/deferred all work.
+    _interactive = True
     _port = _PORT_BACKGROUND
 
 
