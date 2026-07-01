@@ -1501,6 +1501,124 @@ class _TestServerMixin:
         self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
 
     # -----------------------------------------------------------------
+    # Camera animation tools (REQ-10).
+
+    def test_camera_position_keyframe(self) -> None:
+        """Camera position keyframe via object_keyframe_insert."""
+        data = self._test_tool("object_keyframe_insert", {
+            "object_name": "Camera",
+            "frame": 1,
+            "location": [0.0, -8.0, 5.0],
+            "interpolation": "LINEAR",
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["object_name"], "Camera")
+        self.assertIn("location", data["inserted"])
+
+    def test_camera_target_track_basic(self) -> None:
+        """Set up Track-To constraint using scene camera."""
+        data = self._test_tool("camera_target_track", {
+            "target_location": [0.0, 0.0, 0.0],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["camera_name"], "Camera")
+        self.assertIsInstance(data["target_name"], str)
+        self.assertTrue(data["target_name"])
+        self.assertIsInstance(data["constraint_name"], str)
+        self.assertEqual(data["frame"], -1)
+
+    def test_camera_target_track_explicit_camera(self) -> None:
+        """Explicit camera_name resolves correctly."""
+        data = self._test_tool("camera_target_track", {
+            "camera_name": "Camera",
+            "target_name": "FocusPoint",
+            "target_location": [1.0, 0.0, 0.0],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["camera_name"], "Camera")
+        self.assertEqual(data["target_name"], "FocusPoint")
+
+    def test_camera_target_track_with_keyframe(self) -> None:
+        """Insert keyframe on target and verify via object_fcurve_list."""
+        self._test_tool("camera_target_track", {
+            "target_name": "CamTarget",
+            "target_location": [0.0, 0.0, 0.0],
+            "frame": 1,
+            "interpolation": "LINEAR",
+        })
+        self._test_tool("camera_target_track", {
+            "target_name": "CamTarget",
+            "target_location": [5.0, 0.0, 0.0],
+            "frame": 30,
+            "interpolation": "LINEAR",
+        })
+        fcurve = self._test_tool("object_fcurve_list", {
+            "object_name": "CamTarget",
+            "data_path": "location",
+        })
+        self.assertEqual(fcurve["status"], "ok")
+        self.assertEqual(len(fcurve["curves"]), 3)
+        x_curve = next(c for c in fcurve["curves"] if c["array_index"] == 0)
+        self.assertEqual(len(x_curve["keyframes"]), 2)
+        self.assertEqual(x_curve["keyframes"][0]["frame"], 1)
+        self.assertAlmostEqual(x_curve["keyframes"][0]["value"], 0.0, places=4)
+        self.assertEqual(x_curve["keyframes"][1]["frame"], 30)
+        self.assertAlmostEqual(x_curve["keyframes"][1]["value"], 5.0, places=4)
+        self.assertEqual(x_curve["keyframes"][0]["interpolation"], "LINEAR")
+
+    def test_camera_target_track_idempotent(self) -> None:
+        """Calling twice with the same target does not duplicate the constraint."""
+        self._test_tool("camera_target_track", {
+            "target_name": "StableTarget",
+            "target_location": [0.0, 0.0, 0.0],
+        })
+        d2 = self._test_tool("camera_target_track", {
+            "target_name": "StableTarget",
+            "target_location": [1.0, 0.0, 0.0],
+        })
+        self.assertEqual(d2["status"], "ok")
+        # Verify only one Track-To constraint exists via execute_blender_code.
+        check = self._test_tool("execute_blender_code", {
+            "code": (
+                "import bpy\n"
+                "cam = bpy.data.objects['Camera']\n"
+                "target = bpy.data.objects.get('StableTarget')\n"
+                "count = sum(\n"
+                "    1 for c in cam.constraints\n"
+                "    if c.type == 'TRACK_TO' and c.target == target\n"
+                ")\n"
+                "result = {'constraint_count': count}\n"
+            ),
+        })
+        self.assertEqual(check["constraint_count"], 1)
+
+    def test_camera_target_track_auto_target_name(self) -> None:
+        """When target_name is omitted, it defaults to '{camera}_Target'."""
+        data = self._test_tool("camera_target_track", {
+            "camera_name": "Camera",
+            "target_location": [0.0, 0.0, 0.0],
+        })
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["target_name"], "Camera_Target")
+
+    def test_camera_target_track_error_not_camera(self) -> None:
+        data = self._test_tool("camera_target_track", {
+            "camera_name": "Cube",
+            "target_location": [0.0, 0.0, 0.0],
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "INVALID_OBJECT_TYPE")
+        self.assertIsInstance(data["current_state"]["available_cameras"], list)
+
+    def test_camera_target_track_error_object_not_found(self) -> None:
+        data = self._test_tool("camera_target_track", {
+            "camera_name": "NoSuchCamera",
+            "target_location": [0.0, 0.0, 0.0],
+        })
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["error_code"], "OBJECT_NOT_FOUND")
+
+    # -----------------------------------------------------------------
     # Render tools.
 
     def _assert_valid_png(self, filepath: str) -> None:
